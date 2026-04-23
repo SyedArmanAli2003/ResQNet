@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResQNet — Coordinator Dashboard</title>
+  <meta name="description" content="ResQNet Coordinator Dashboard — real-time incident monitoring and response management." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="coord-page">
+
+<!-- ── PASSWORD GATE MODAL ─────────────────────────── -->
+<div id="authModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <div class="modal-box auth-box">
+    <div class="auth-icon">🔐</div>
+    <h2 id="authTitle" class="modal-title">Coordinator Access</h2>
+    <p class="modal-sub">Enter the coordinator password to proceed</p>
+    <input id="passwordInput" type="password" class="auth-input" placeholder="Password…" autocomplete="current-password" />
+    <p id="authError" class="auth-error" hidden>Incorrect password. Try again.</p>
+    <button id="authSubmit" class="btn-primary btn-full">Enter Dashboard</button>
+    <a href="index.html" class="btn-ghost" style="display:block;text-align:center;margin-top:.5rem;">← Back to Reporter</a>
+  </div>
+</div>
+
+<!-- ── COORDINATOR LAYOUT ──────────────────────────── -->
+<div id="coordApp" class="coord-app" hidden>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="nav-brand">
+      <span class="nav-logo">ResQNet</span>
+      <span class="nav-sub">Crisis response platform</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="sidebar-link active" id="navLive">
+        <span class="dot dot-critical"></span>Live incidents
+      </a>
+      <a href="#" class="sidebar-link" id="navVolunteers">
+        <span class="dot dot-minor"></span>Volunteers
+      </a>
+      <a href="index.html" class="sidebar-link">
+        <span class="dot dot-moderate"></span>Report a need
+      </a>
+      <a href="#" class="sidebar-link" id="navHistory">
+        <span class="dot dot-monitor"></span>History
+      </a>
+      <a href="#" class="sidebar-link" id="navSettings">
+        <span class="dot dot-monitor"></span>Settings
+      </a>
+    </nav>
+
+    <button id="logoutBtn" class="btn-outline btn-sm sidebar-logout">Coordinator view ↗</button>
+  </aside>
+
+  <!-- Main content -->
+  <div class="coord-main">
+
+    <!-- Top bar -->
+    <header class="coord-header">
+      <div>
+        <h1 class="page-title">Live incidents</h1>
+      </div>
+      <div class="header-stats">
+        <div class="badge-stat" id="hdrActive"><span id="hdrActiveNum">0</span> active</div>
+        <div class="badge-stat badge-deployed" id="hdrDeployed"><span id="hdrDeployedNum">0</span> deployed</div>
+        <div class="badge-stat badge-resolved" id="hdrResolved"><span id="hdrResolvedNum">0</span> resolved today</div>
+      </div>
+      <a href="index.html" class="btn-primary btn-sm">+ New SOS</a>
+    </header>
+
+    <!-- Incidents list -->
+    <div class="incidents-wrap">
+      <p class="sort-label">SORTED BY SEVERITY</p>
+      <div id="incidentsList" class="incidents-list">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📡</div>
+          <p>Listening for incidents…</p>
+          <small>New reports will appear here in real time.</small>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /coord-main -->
+</div><!-- /coordApp -->
+
+<!-- ══ TOAST ═══════════════════════════════════════════ -->
+<div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+<script type="module" src="coordinator.js"></script>
+</body>
+</html>
