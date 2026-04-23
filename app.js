@@ -1,286 +1,262 @@
 import { db, ensureAuth } from './firebaseConfig.js';
-import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  serverTimestamp, 
+  doc, 
+  updateDoc 
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// DOM Elements
+// --- DOM ELEMENTS ---
 const sosBtn = document.getElementById('sosBtn');
-const sosProgress = document.getElementById('sosProgress');
+const sosProgress = document.getElementById('sosProgressCircle');
 const categoryModal = document.getElementById('categoryModal');
-const modalGpsStatus = document.getElementById('modalGpsStatus');
-const catBtns = document.querySelectorAll('.cat-btn');
-const modalDesc = document.getElementById('modalDesc');
-const modalSubmit = document.getElementById('modalSubmit');
-const modalCancel = document.getElementById('modalCancel');
-
-const reportForm = document.getElementById('reportForm');
-const locationField = document.getElementById('locationField');
-const getGpsBtn = document.getElementById('getGpsBtn');
-const coordsDisplay = document.getElementById('coordsDisplay');
-
-const voiceSection = document.getElementById('voiceSection');
-const voiceText = document.getElementById('voiceText');
+const gpsStatus = document.getElementById('gpsStatus');
 const voiceBanner = document.getElementById('voiceBanner');
-const voiceBannerText = document.getElementById('voiceBannerText');
+const voiceStatusText = document.getElementById('voiceStatusText');
+const catBtns = document.querySelectorAll('.cat-btn');
+const incidentDesc = document.getElementById('incidentDesc');
+const submitBtn = document.getElementById('submitIncident');
+const cancelBtn = document.getElementById('cancelModal');
+const incidentsList = document.getElementById('incidentsList');
+const activeCountEl = document.getElementById('activeCount');
+const resolvedCountEl = document.getElementById('resolvedCount');
 
-let holdTimer;
+// --- STATE ---
+let holdTimer = null;
 let isHolding = false;
 let currentCoords = null;
-let currentAddress = "";
-let selectedCategory = "";
+let currentAddress = "Capturing location...";
+let selectedCategory = null;
 let voiceTranscript = "";
 
-// Initialize App
+// Initialize
 async function init() {
   await ensureAuth();
+  listenToIncidents();
 }
 init();
 
-// --- TOAST UTILITY ---
-function showToast(msg, duration = 3000) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), duration);
-}
-
-// --- GPS UTILITY ---
-async function fetchAddress(lat, lng) {
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-    const data = await res.json();
-    return data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-  } catch (err) {
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-  }
-}
-
-async function captureGps() {
+// --- GPS & REVERSE GEOCODING ---
+async function getPosition() {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Geolocation not supported"));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        currentCoords = { lat: latitude, lng: longitude };
-        currentAddress = await fetchAddress(latitude, longitude);
-        resolve({ coords: currentCoords, address: currentAddress });
-      },
-      (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    navigator.geolocation.getCurrentPosition(resolve, reject, { 
+      enableHighAccuracy: true,
+      timeout: 10000 
+    });
   });
 }
 
-// --- VOICE RECOGNITION (5 SECONDS) ---
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+    const data = await res.json();
+    return data.display_name || "Location found";
+  } catch (e) {
+    return `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+  }
+}
+
+// --- VOICE RECORDING (5 SECONDS) ---
 function startVoiceCapture() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    console.log("Speech recognition not supported in this browser.");
-    voiceBanner.style.display = 'none';
+    console.log("Speech Recognition not supported.");
     return;
   }
 
   const recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = true;
   recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
 
-  voiceBanner.style.display = 'flex';
-  voiceBannerText.textContent = "🎙 Listening for 5s... speak now";
-  
+  voiceBanner.hidden = false;
+  voiceStatusText.textContent = "🎙 Listening for 5s... speak now";
+  voiceTranscript = "";
+
   recognition.onresult = (event) => {
-    let interimTranscript = '';
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      if (event.results[i].isFinal) {
-        voiceTranscript += event.results[i][0].transcript;
-      } else {
-        interimTranscript += event.results[i][0].transcript;
-      }
-    }
-    voiceBannerText.textContent = `🎙 "${voiceTranscript || interimTranscript}"`;
+    voiceTranscript = event.results[0][0].transcript;
+    voiceStatusText.textContent = `🎙 "${voiceTranscript}"`;
   };
 
-  recognition.onerror = (event) => {
-    console.warn("Speech recognition error", event.error);
-    voiceBannerText.textContent = "🎙 Recording failed or cancelled";
+  recognition.onerror = () => {
+    voiceStatusText.textContent = "🎙 Recording failed.";
   };
 
   recognition.start();
 
   // Stop after 5 seconds
   setTimeout(() => {
-    try {
-      recognition.stop();
-      voiceBanner.style.display = 'none';
-      if (voiceTranscript) {
-        // Show in manual form if user cancels modal
-        voiceSection.style.display = 'flex';
-        voiceText.textContent = `"${voiceTranscript}"`;
-      }
-    } catch(e) {}
+    recognition.stop();
+    setTimeout(() => { voiceBanner.hidden = true; }, 2000);
   }, 5000);
 }
 
-
-// --- SOS BUTTON HOLD LOGIC ---
-function startHold(e) {
-  // Ignore right clicks
-  if (e.type === 'mousedown' && e.button !== 0) return;
-  
+// --- SOS HOLD LOGIC ---
+sosBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
   isHolding = true;
-  sosBtn.classList.add('holding');
+  sosProgress.style.strokeDashoffset = '0';
+  sosProgress.style.transition = 'stroke-dashoffset 2s linear';
   
-  holdTimer = setTimeout(() => {
+  holdTimer = setTimeout(async () => {
     if (isHolding) {
-      sosBtn.classList.remove('holding');
       triggerSOS();
     }
   }, 2000);
-}
+});
 
-function endHold() {
-  if (isHolding) {
-    isHolding = false;
-    clearTimeout(holdTimer);
-    sosBtn.classList.remove('holding');
-  }
-}
+const endHold = () => {
+  isHolding = false;
+  clearTimeout(holdTimer);
+  sosProgress.style.transition = 'none';
+  sosProgress.style.strokeDashoffset = '339';
+};
 
-sosBtn.addEventListener('mousedown', startHold);
-sosBtn.addEventListener('touchstart', startHold, { passive: true });
-window.addEventListener('mouseup', endHold);
-window.addEventListener('touchend', endHold);
+window.addEventListener('pointerup', endHold);
+window.addEventListener('pointercancel', endHold);
 
 async function triggerSOS() {
-  // Vibrate if supported
-  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  
-  modalGpsStatus.textContent = "📍 Capturing GPS...";
   categoryModal.hidden = false;
-  
-  // Clear previous state
-  selectedCategory = "";
-  voiceTranscript = "";
-  catBtns.forEach(b => b.classList.remove('selected'));
-  modalDesc.value = "";
-  voiceBanner.style.display = 'none';
+  gpsStatus.textContent = "📍 Capturing GPS...";
   
   try {
-    const { address } = await captureGps();
-    modalGpsStatus.textContent = `📍 ${address}`;
-    locationField.value = address;
-    coordsDisplay.textContent = `${currentCoords.lat.toFixed(5)}, ${currentCoords.lng.toFixed(5)}`;
+    const pos = await getPosition();
+    currentCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    currentAddress = await reverseGeocode(currentCoords.lat, currentCoords.lng);
+    gpsStatus.textContent = `📍 ${currentAddress}`;
     
-    // Start 5-second voice capture
+    // Start voice recording after GPS
     startVoiceCapture();
   } catch (err) {
-    modalGpsStatus.textContent = "📍 GPS failed (ensure permissions)";
+    gpsStatus.textContent = "📍 GPS permission denied.";
   }
 }
 
-// --- MODAL CATEGORY SELECTION ---
+// --- MODAL LOGIC ---
 catBtns.forEach(btn => {
   btn.addEventListener('click', () => {
-    catBtns.forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
+    catBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
     selectedCategory = btn.dataset.type;
   });
 });
 
-modalCancel.addEventListener('click', () => {
+cancelBtn.addEventListener('click', () => {
   categoryModal.hidden = true;
+  resetModal();
 });
 
-// --- SUBMITTING INCIDENT TO FIRESTORE ---
-async function saveIncident(type, description, locationStr, coords, vTranscript = "") {
+function resetModal() {
+  selectedCategory = null;
+  catBtns.forEach(b => b.classList.remove('active'));
+  incidentDesc.value = "";
+  voiceTranscript = "";
+}
+
+submitBtn.addEventListener('click', async () => {
+  if (!selectedCategory) {
+    showToast("Please select a category");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Sending...";
+
   try {
-    const docRef = await addDoc(collection(db, "incidents"), {
-      type: type,
-      description: description,
-      location: locationStr || "Unknown Location",
-      coordinates: coords || { lat: 0, lng: 0 },
+    await addDoc(collection(db, "incidents"), {
+      type: selectedCategory,
+      description: incidentDesc.value,
+      location: currentAddress,
+      coordinates: currentCoords,
+      voiceTranscript: voiceTranscript,
       timestamp: serverTimestamp(),
       status: "pending",
-      triageLevel: null,
-      voiceTranscript: vTranscript
+      triageLevel: null
     });
-    return docRef.id;
+    
+    showToast("Report Sent!");
+    categoryModal.hidden = true;
+    resetModal();
   } catch (e) {
-    console.error("Error adding document: ", e);
-    throw e;
+    showToast("Failed to report.");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Send SOS Report";
+  }
+});
+
+// --- REAL-TIME FEED ---
+function listenToIncidents() {
+  const q = query(collection(db, "incidents"), orderBy("timestamp", "desc"));
+  
+  onSnapshot(q, (snapshot) => {
+    incidentsList.innerHTML = "";
+    let active = 0;
+    let resolved = 0;
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.status === 'resolved') {
+        resolved++;
+      } else {
+        active++;
+        renderIncidentCard({ id: doc.id, ...data });
+      }
+    });
+
+    activeCountEl.textContent = active;
+    resolvedCountEl.textContent = resolved;
+  });
+}
+
+function renderIncidentCard(inc) {
+  const severity = getSeverity(inc.type);
+  const card = document.createElement('div');
+  card.className = `incident-card`;
+  card.style.borderLeftColor = severity.color;
+
+  const time = inc.timestamp ? inc.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now";
+
+  card.innerHTML = `
+    <div class="card-top">
+      <span class="card-level" style="color: ${severity.color}">${severity.label}</span>
+      <span>${time}</span>
+    </div>
+    <h3 class="card-title">${inc.type} emergency</h3>
+    <p class="card-loc">${inc.location}</p>
+    ${inc.description ? `<p class="card-desc">"${inc.description}"</p>` : ''}
+    ${inc.voiceTranscript ? `<p class="card-desc" style="color: var(--accent-red)">🎙 "${inc.voiceTranscript}"</p>` : ''}
+    <div class="card-tags">
+      <span class="tag">Paramedic</span>
+      <span class="tag">First aid</span>
+    </div>
+    <button class="btn-resolve" data-id="${inc.id}">Mark resolved</button>
+  `;
+
+  card.querySelector('.btn-resolve').addEventListener('click', async (e) => {
+    const id = e.target.dataset.id;
+    await updateDoc(doc(db, "incidents", id), { status: "resolved" });
+  });
+
+  incidentsList.appendChild(card);
+}
+
+function getSeverity(type) {
+  switch(type) {
+    case 'Medical': return { color: '#E53935', label: 'Level 1 — Critical' };
+    case 'Disaster': return { color: '#F57C00', label: 'Level 2 — Severe' };
+    case 'Conflict': return { color: '#FBC02D', label: 'Level 3 — Moderate' };
+    default: return { color: '#4CAF50', label: 'Level 4 — Minor' };
   }
 }
 
-modalSubmit.addEventListener('click', async () => {
-  if (!selectedCategory) {
-    showToast("Please select a crisis category.");
-    return;
-  }
-  
-  modalSubmit.disabled = true;
-  modalSubmit.textContent = "Sending...";
-  
-  try {
-    await saveIncident(
-      selectedCategory, 
-      modalDesc.value, 
-      currentAddress, 
-      currentCoords,
-      voiceTranscript
-    );
-    showToast("Emergency reported successfully.");
-    categoryModal.hidden = true;
-  } catch (err) {
-    showToast("Failed to send report.");
-  } finally {
-    modalSubmit.disabled = false;
-    modalSubmit.textContent = "Send SOS Report";
-  }
-});
-
-// --- MANUAL FORM LOGIC ---
-getGpsBtn.addEventListener('click', async () => {
-  getGpsBtn.disabled = true;
-  try {
-    const { address, coords } = await captureGps();
-    locationField.value = address;
-    coordsDisplay.textContent = `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
-    showToast("GPS location updated.");
-  } catch (err) {
-    showToast("Could not capture GPS.");
-  }
-  getGpsBtn.disabled = false;
-});
-
-reportForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const type = document.getElementById('crisisType').value;
-  const desc = document.getElementById('description').value;
-  const loc = locationField.value;
-  const submitBtn = document.getElementById('submitBtn');
-  const submitLabel = document.getElementById('submitLabel');
-  const submitSpinner = document.getElementById('submitSpinner');
-  
-  submitBtn.disabled = true;
-  submitLabel.style.display = 'none';
-  submitSpinner.style.display = 'block';
-  
-  try {
-    await saveIncident(type, desc, loc, currentCoords, voiceTranscript);
-    showToast("Report submitted successfully.");
-    reportForm.reset();
-    coordsDisplay.textContent = "";
-    voiceSection.style.display = 'none';
-    voiceTranscript = "";
-    currentCoords = null;
-    currentAddress = "";
-  } catch (err) {
-    showToast("Failed to submit report.");
-  } finally {
-    submitBtn.disabled = false;
-    submitLabel.style.display = 'block';
-    submitSpinner.style.display = 'none';
-  }
-});
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}

@@ -1,7 +1,5 @@
 // =====================================================
 // firebaseConfig.js — ResQNet Firebase Initialization
-// REPLACE the values below with your actual Firebase
-// project config from the Firebase Console.
 // =====================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -9,12 +7,13 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebas
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAgSylHSHd1KRN4SYNqG30cQkrGRfY2CCI",
+  authDomain: "resqnet-e74e0.firebaseapp.com",
+  projectId: "resqnet-e74e0",
+  storageBucket: "resqnet-e74e0.firebasestorage.app",
+  messagingSenderId: "206471236870",
+  appId: "1:206471236870:web:807c01c54ef0adb332a287",
+  measurementId: "G-79KC3T537B"
 };
 
 const app = initializeApp(firebaseConfig);

@@ -3,146 +3,151 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ResQNet — Crisis Reporter</title>
-  <meta name="description" content="ResQNet — One-tap community crisis reporting. Hold SOS 2 seconds to activate GPS-backed emergency report." />
+  <title>ResQNet — Crisis Response Platform</title>
+  <meta name="description" content="ResQNet — Smart Community Resource Allocation with One-Tap Crisis Response." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body class="dashboard-page">
 
-<!-- ── TOP NAV ──────────────────────────────────────── -->
-<nav class="navbar">
-  <div class="nav-brand">
-    <span class="nav-logo">ResQNet</span>
-    <span class="nav-sub">Crisis response platform</span>
-  </div>
-  <a href="coordinator.html" class="btn-outline btn-sm">Coordinator View →</a>
-</nav>
+  <!-- ── SIDEBAR ──────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="nav-brand">
+        <span class="nav-logo">ResQNet</span>
+        <span class="nav-sub">Crisis response platform</span>
+      </div>
 
-<!-- ── HERO / SOS SECTION ───────────────────────────── -->
-<main class="reporter-layout">
+      <nav class="sidebar-nav">
+        <a href="#" class="sidebar-link active">
+          <span class="dot dot-critical"></span>Live incidents
+        </a>
+        <a href="#" class="sidebar-link">
+          <span class="dot dot-minor"></span>Volunteers
+        </a>
+        <a href="#" class="sidebar-link">
+          <span class="dot dot-moderate"></span>Report a need
+        </a>
+        <a href="#" class="sidebar-link">
+          <span class="dot dot-monitor"></span>History
+        </a>
+        <a href="#" class="sidebar-link">
+          <span class="dot dot-monitor"></span>Settings
+        </a>
+      </nav>
+    </div>
 
-  <section class="sos-section">
-    <div class="sos-card">
-      <div class="sos-wrap">
-        <button id="sosBtn" class="sos-btn" aria-label="Hold 2 seconds to send SOS">
-          <span class="sos-label">SOS</span>
-          <svg class="sos-ring" viewBox="0 0 120 120">
-            <circle class="sos-ring-track" cx="60" cy="60" r="54" />
-            <circle id="sosProgress" class="sos-ring-fill" cx="60" cy="60" r="54" />
+    <button id="coordViewBtn" class="btn-coord-view">Coordinator view</button>
+  </aside>
+
+  <!-- ── MAIN FEED (CENTER) ───────────────────────────── -->
+  <main class="feed-section">
+    <header class="feed-header">
+      <div class="header-left">
+        <h1 class="page-title">Live incidents</h1>
+      </div>
+      <div class="header-stats">
+        <div class="badge-stat"><span id="activeCount">3</span> active</div>
+        <div class="badge-stat badge-deployed"><span id="deployedCount">6</span> deployed</div>
+        <div class="badge-stat badge-resolved"><span id="resolvedCount">5</span> resolved today</div>
+      </div>
+      <button class="btn-new-sos">+ New SOS</button>
+    </header>
+
+    <div class="incidents-container">
+      <p class="sort-label">SORTED BY SEVERITY</p>
+      <div id="incidentsList" class="incidents-list">
+        <!-- Incidents will be injected here via JS -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ── ACTION PANEL (RIGHT) ─────────────────────────── -->
+  <aside class="action-panel">
+    
+    <!-- SOS CARD -->
+    <section class="sos-card">
+      <div class="sos-btn-wrap">
+        <button id="sosBtn" class="sos-circle">
+          <span class="sos-text">SOS</span>
+          <svg class="sos-progress-svg" viewBox="0 0 120 120">
+            <circle class="sos-bg-circle" cx="60" cy="60" r="54" />
+            <circle id="sosProgressCircle" class="sos-fill-circle" cx="60" cy="60" r="54" />
           </svg>
         </button>
-        <p class="sos-hint">Emergency report</p>
-        <p class="sos-hint-sub">Hold button 2 seconds — GPS auto-captured</p>
       </div>
+      <h2 class="sos-title">Emergency report</h2>
+      <p class="sos-subtitle">Hold button 2 seconds — GPS auto-captured</p>
+    </section>
 
-      <div class="stats-block">
-        <h3 class="stats-label">TODAY'S STATS</h3>
-        <div class="stats-grid" id="statsGrid">
-          <div class="stat-card"><span class="stat-num" id="statActive">—</span><span class="stat-desc">Active</span></div>
-          <div class="stat-card"><span class="stat-num" id="statDeployed">—</span><span class="stat-desc">Deployed</span></div>
-          <div class="stat-card"><span class="stat-num" id="statResolved">—</span><span class="stat-desc">Resolved</span></div>
-          <div class="stat-card"><span class="stat-num">9m</span><span class="stat-desc">Avg response</span></div>
+    <!-- TODAY'S STATS -->
+    <section class="stats-section">
+      <h3 class="panel-label">TODAY'S STATS</h3>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-val">3</span>
+          <span class="stat-label">Active</span>
         </div>
-
-        <h3 class="stats-label" style="margin-top:1.4rem;">TRIAGE LEVELS</h3>
-        <ul class="triage-legend">
-          <li><span class="dot dot-critical"></span>Level 1 — Critical</li>
-          <li><span class="dot dot-severe"></span>Level 2 — Severe</li>
-          <li><span class="dot dot-moderate"></span>Level 3 — Moderate</li>
-          <li><span class="dot dot-minor"></span>Level 4 — Minor</li>
-          <li><span class="dot dot-monitor"></span>Level 5 — Monitoring</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── MANUAL REPORT FORM ──────────────────────────── -->
-  <section class="form-section">
-    <h2 class="section-title">Manual Report</h2>
-    <form id="reportForm" class="report-form" novalidate>
-
-      <div class="field-group">
-        <label for="crisisType">Crisis Type</label>
-        <select id="crisisType" name="crisisType" required>
-          <option value="" disabled selected>Select crisis type…</option>
-          <option value="Medical">🏥 Medical</option>
-          <option value="Disaster">🌊 Disaster</option>
-          <option value="Conflict">⚔️ Conflict</option>
-          <option value="Resource">📦 Resource</option>
-          <option value="Hospitality">🏠 Hospitality</option>
-        </select>
-      </div>
-
-      <div class="field-group">
-        <label for="description">Description</label>
-        <textarea id="description" name="description" rows="3" placeholder="Briefly describe the situation…" required></textarea>
-      </div>
-
-      <div class="field-group">
-        <label for="locationField">Location</label>
-        <div class="location-row">
-          <input id="locationField" name="location" type="text" placeholder="Auto-filled from GPS or enter manually…" />
-          <button type="button" id="getGpsBtn" class="btn-icon" title="Get GPS location" aria-label="Capture GPS location">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-              <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>
-            </svg>
-          </button>
+        <div class="stat-box">
+          <span class="stat-val">6</span>
+          <span class="stat-label">Deployed</span>
         </div>
-        <small id="coordsDisplay" class="coord-hint"></small>
-      </div>
-
-      <div class="field-group voice-field" id="voiceSection" style="display:none;">
-        <label>Voice Note</label>
-        <div class="voice-preview" id="voicePreview">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>
-          <span id="voiceText" class="voice-text"></span>
+        <div class="stat-box">
+          <span class="stat-val">5</span>
+          <span class="stat-label">Resolved</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val">9m</span>
+          <span class="stat-label">Avg response</span>
         </div>
       </div>
+    </section>
 
-      <button type="submit" class="btn-primary btn-full" id="submitBtn">
-        <span id="submitLabel">Submit Report</span>
-        <svg id="submitSpinner" class="spinner" viewBox="0 0 24 24" style="display:none;"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31" stroke-dashoffset="31"/></svg>
-      </button>
-    </form>
-  </section>
+    <!-- TRIAGE LEVELS -->
+    <section class="triage-section">
+      <h3 class="panel-label">TRIAGE LEVELS</h3>
+      <ul class="triage-list">
+        <li><span class="dot dot-critical"></span> Level 1 — Critical</li>
+        <li><span class="dot dot-severe"></span> Level 2 — Severe</li>
+        <li><span class="dot dot-moderate"></span> Level 3 — Moderate</li>
+        <li><span class="dot dot-minor"></span> Level 4 — Minor</li>
+        <li><span class="dot dot-monitor"></span> Level 5 — Monitoring</li>
+      </ul>
+    </section>
 
-</main>
+  </aside>
 
-<!-- ══ CRISIS CATEGORY MODAL ══════════════════════════ -->
-<div id="categoryModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
-  <div class="modal-box">
-    <h2 id="modalTitle" class="modal-title">What's the crisis?</h2>
-    <p class="modal-sub" id="modalGpsStatus">📍 GPS captured</p>
+  <!-- ══ CRISIS CATEGORY MODAL ══════════════════════════ -->
+  <div id="categoryModal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <h2 class="modal-title">What's the crisis?</h2>
+      <p id="gpsStatus" class="modal-gps">📍 GPS captured</p>
 
-    <!-- Voice recording status -->
-    <div class="voice-banner" id="voiceBanner" style="display:none;">
-      <div class="voice-pulse"></div>
-      <span id="voiceBannerText">🎙 Listening for 5 s… speak now</span>
-    </div>
+      <div id="voiceBanner" class="voice-banner" hidden>
+        <div class="voice-pulse"></div>
+        <span id="voiceStatusText">🎙 Listening for 5s... speak now</span>
+      </div>
 
-    <div class="category-grid">
-      <button class="cat-btn" data-type="Medical"      id="cat-Medical">🏥<span>Medical</span></button>
-      <button class="cat-btn" data-type="Disaster"     id="cat-Disaster">🌊<span>Disaster</span></button>
-      <button class="cat-btn" data-type="Conflict"     id="cat-Conflict">⚔️<span>Conflict</span></button>
-      <button class="cat-btn" data-type="Resource"     id="cat-Resource">📦<span>Resource</span></button>
-      <button class="cat-btn" data-type="Hospitality" id="cat-Hospitality">🏠<span>Hospitality</span></button>
-    </div>
+      <div class="category-grid">
+        <button class="cat-btn" data-type="Medical">🏥<span>Medical</span></button>
+        <button class="cat-btn" data-type="Disaster">🌊<span>Disaster</span></button>
+        <button class="cat-btn" data-type="Conflict">⚔️<span>Conflict</span></button>
+        <button class="cat-btn" data-type="Resource">📦<span>Resource</span></button>
+        <button class="cat-btn" data-type="Hospitality">🏠<span>Hospitality</span></button>
+      </div>
 
-    <textarea id="modalDesc" class="modal-desc" rows="3" placeholder="Add a short description (optional)…"></textarea>
+      <textarea id="incidentDesc" class="modal-textarea" placeholder="Add a short description (optional)..."></textarea>
 
-    <div class="modal-actions">
-      <button id="modalSubmit" class="btn-primary">Send SOS Report</button>
-      <button id="modalCancel" class="btn-ghost">Cancel</button>
+      <div class="modal-footer">
+        <button id="submitIncident" class="btn-primary">Send SOS Report</button>
+        <button id="cancelModal" class="btn-ghost">Cancel</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ══ TOAST NOTIFICATION ═════════════════════════════ -->
-<div id="toast" class="toast" role="alert" aria-live="polite"></div>
+  <div id="toast" class="toast"></div>
 
-<script type="module" src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
