@@ -42,11 +42,11 @@
       </div>
 
       <nav class="coord-nav">
-        <a href="#" class="coord-nav-link active"><span class="coord-dot coord-dot-red"></span>Live incidents</a>
-        <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-teal"></span>Volunteers</a>
-        <a href="reporter.html" class="coord-nav-link"><span class="coord-dot coord-dot-blue"></span>Report a need</a>
-        <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-gray"></span>History</a>
-        <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-gray"></span>Settings</a>
+        <a href="#" class="coord-nav-link active" data-panel="incidents"><span class="coord-dot coord-dot-red"></span>Live incidents</a>
+        <a href="#" class="coord-nav-link" data-panel="volunteers" style="display:flex; align-items:center;"><span class="coord-dot coord-dot-teal"></span>Volunteers<span id="navVolBadge" class="coord-badge" style="margin-left:auto; padding:2px 6px; font-size:0.7rem; background:#1c2533; border:none;">0</span></a>
+        <a href="#" class="coord-nav-link" data-panel="report"><span class="coord-dot coord-dot-blue"></span>Report a need</a>
+        <a href="#" class="coord-nav-link" data-panel="history"><span class="coord-dot coord-dot-gray"></span>History</a>
+        <a href="#" class="coord-nav-link" data-panel="settings"><span class="coord-dot coord-dot-gray"></span>Settings</a>
       </nav>
     </div>
 
@@ -57,26 +57,110 @@
   </aside>
 
   <main class="coord-main">
-    <header class="coord-topbar">
-      <h1 class="coord-title">Live incidents</h1>
-      <div class="coord-topbar-right">
-        <div class="coord-pill"><span id="hdrActiveNum">0</span> active</div>
-        <div class="coord-pill"><span id="hdrDeployedNum">0</span> deployed</div>
-        <div class="coord-pill"><span id="hdrResolvedNum">0</span> resolved today</div>
-        <a href="reporter.html" class="coord-new-btn">+ New SOS</a>
-      </div>
-    </header>
-
-    <section class="coord-feed">
-      <p class="coord-sort">SORTED BY SEVERITY</p>
-      <div id="incidentsList" class="coord-incidents-list">
-        <div class="coord-empty-state" id="emptyState">
-          <div class="coord-empty-icon">📡</div>
-          <p>Listening for incidents...</p>
-          <small>New reports will appear here in real time.</small>
+    
+    <!-- PANEL: INCIDENTS (Default) -->
+    <div id="panel-incidents" class="panel" style="display: block;">
+      <header class="coord-topbar">
+        <h1 class="coord-title">Live incidents</h1>
+        <div class="coord-topbar-right">
+          <div class="coord-pill"><span id="hdrActiveNum">0</span> active</div>
+          <div class="coord-pill"><span id="hdrDeployedNum">0</span> deployed</div>
+          <div class="coord-pill"><span id="hdrResolvedNum">0</span> resolved today</div>
+          <button class="coord-new-btn" onclick="showPanel('report')">+ New SOS</button>
         </div>
+      </header>
+
+      <section class="coord-feed">
+        <p class="coord-sort">SORTED BY SEVERITY</p>
+        <div id="incidentsList" class="coord-incidents-list">
+          <div class="coord-empty-state" id="emptyState">
+            <div class="coord-empty-icon">📡</div>
+            <p>Listening for incidents...</p>
+            <small>New reports will appear here in real time.</small>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- PANEL: VOLUNTEERS -->
+    <div id="panel-volunteers" class="panel" style="display: none; padding: 2rem;">
+      <h1 class="coord-title" style="margin-bottom: 1rem;">Volunteers Management</h1>
+      <div style="display:flex; gap: 1rem; margin-bottom: 2rem;">
+        <div class="coord-pill">Total: <span id="volTotal">0</span></div>
+        <div class="coord-pill" style="color:var(--color-minor)">Available: <span id="volAvail">0</span></div>
+        <div class="coord-pill" style="color:var(--color-critical)">Busy: <span id="volBusy">0</span></div>
       </div>
-    </section>
+      <div style="display:flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+        <button class="coord-pill vol-filter active" data-vfilter="All" style="cursor:pointer">All</button>
+        <button class="coord-pill vol-filter" data-vfilter="Available" style="cursor:pointer">Available</button>
+        <button class="coord-pill vol-filter" data-vfilter="Busy" style="cursor:pointer">Busy</button>
+      </div>
+      <div id="coordVolList" style="display:flex; flex-direction:column; gap:1rem;">
+        <p style="color:var(--text-dim)">Loading volunteers...</p>
+      </div>
+    </div>
+
+    <!-- PANEL: REPORT (SOS) -->
+    <div id="panel-report" class="panel" style="display: none; padding: 2rem;">
+      <h1 class="coord-title" style="margin-bottom: 2rem;">Submit a Report</h1>
+      <div style="background:var(--bg-deep); padding:2rem; border-radius:12px; border:1px solid var(--border);">
+        <p style="margin-bottom:1rem; color:var(--text-dim)">Create an incident report directly from the dashboard.</p>
+        <div class="category-grid" style="margin-bottom: 1.5rem;">
+          <button class="cat-btn" data-type="Medical">🏥<span>Medical</span></button>
+          <button class="cat-btn" data-type="Disaster">🌊<span>Disaster</span></button>
+          <button class="cat-btn" data-type="Conflict">⚔️<span>Conflict</span></button>
+          <button class="cat-btn" data-type="Resource">📦<span>Resource</span></button>
+          <button class="cat-btn" data-type="Hospitality">🏠<span>Hospitality</span></button>
+        </div>
+        <textarea id="panelIncidentDesc" class="modal-textarea" placeholder="Add description..." style="height:100px; margin-bottom:1.5rem;"></textarea>
+        <input type="text" id="panelIncidentLoc" class="modal-textarea" placeholder="Location" style="height:auto; padding:0.8rem; margin-bottom:1.5rem;" />
+        <button id="panelSubmitBtn" class="btn-primary" style="padding:1rem 2rem;">Submit Incident</button>
+        <p id="panelSuccessMsg" style="color:var(--accent-green); margin-top:1rem; display:none;">Report submitted successfully!</p>
+      </div>
+    </div>
+
+    <!-- PANEL: HISTORY -->
+    <div id="panel-history" class="panel" style="display: none; padding: 2rem;">
+      <h1 class="coord-title" style="margin-bottom: 1rem;">Incident History</h1>
+      <div style="display:flex; gap: 1rem; margin-bottom: 2rem;">
+        <div class="coord-pill">Total: <span id="histTotal">0</span></div>
+        <div class="coord-pill" style="color:var(--color-critical)">Pending: <span id="histPending">0</span></div>
+        <div class="coord-pill" style="color:var(--color-minor)">Resolved: <span id="histResolved">0</span></div>
+      </div>
+      <div style="display:flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+        <button class="coord-pill hist-filter active" data-hfilter="all" style="cursor:pointer">All</button>
+        <button class="coord-pill hist-filter" data-hfilter="pending" style="cursor:pointer">Pending</button>
+        <button class="coord-pill hist-filter" data-hfilter="resolved" style="cursor:pointer">Resolved</button>
+      </div>
+      <div id="coordHistList" style="display:flex; flex-direction:column; gap:1rem;">
+        <p style="color:var(--text-dim)">Loading history...</p>
+      </div>
+    </div>
+
+    <!-- PANEL: SETTINGS -->
+    <div id="panel-settings" class="panel" style="display: none; padding: 2rem;">
+      <h1 class="coord-title" style="margin-bottom: 2rem;">Settings</h1>
+      <div style="background:var(--bg-deep); padding:2rem; border-radius:12px; border:1px solid var(--border);">
+        <div style="margin-bottom: 1.5rem;">
+          <label style="display:block; color:var(--text-dim); margin-bottom:0.5rem;">Logged in as</label>
+          <input type="text" class="modal-textarea" id="settingsEmail" disabled style="height:auto; padding:0.8rem; opacity:0.7;" />
+        </div>
+        <div style="margin-bottom: 1.5rem;">
+          <label style="display:block; color:var(--text-dim); margin-bottom:0.5rem;">Display Name</label>
+          <input type="text" class="modal-textarea" id="settingsName" placeholder="Your Name" style="height:auto; padding:0.8rem;" />
+        </div>
+        <div style="margin-bottom: 2rem; display:flex; align-items:center; gap:1rem;">
+          <label style="color:var(--text-main);">Enable Notifications</label>
+          <input type="checkbox" id="settingsNotif" style="width:18px; height:18px; accent-color:var(--accent-red);" />
+        </div>
+        <button id="saveSettingsBtn" class="btn-primary" style="padding:0.8rem 2rem; margin-bottom:2rem;">Save Changes</button>
+        
+        <hr style="border:none; border-top:1px solid var(--border); margin-bottom:2rem;" />
+        
+        <button id="settingsSignOut" class="btn-primary" style="background:#2a1111; color:#ff6b6b; padding:0.8rem 2rem;">Sign Out</button>
+      </div>
+    </div>
+
   </main>
 
   <aside class="coord-rightpanel">

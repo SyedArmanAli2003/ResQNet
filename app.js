@@ -13,6 +13,9 @@ import {
   updateDoc 
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+// Replace with your Gemini API key from AI Studio
+const GEMINI_API_KEY = 'YOUR_KEY_HERE';
+
 // --- DOM ELEMENTS ---
 const sosBtn        = document.getElementById('sosBtn');
 const sosProgress   = document.getElementById('sosProgressCircle');
@@ -25,6 +28,8 @@ const catBtns       = document.querySelectorAll('.cat-btn');
 const incidentDesc  = document.getElementById('incidentDesc');
 const submitBtn     = document.getElementById('submitIncident');
 const cancelBtn     = document.getElementById('cancelModal');
+const successModal  = document.getElementById('successModal');
+const btnSubmitAnother = document.getElementById('btnSubmitAnother');
 const incidentsList = document.getElementById('incidentsList');
 const activeCountEl = document.getElementById('activeCount');
 const resolvedCountEl = document.getElementById('resolvedCount');
@@ -59,27 +64,67 @@ async function getPosition() {
 }
 
 async function reverseGeocode(lat, lng) {
-  const fallback = formatCoords(lat, lng);
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`;
+    const res = await fetch(url, {
+      headers: { 'Accept-Language': 'en' }
+    });
+    const data = await res.json();
+    return data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  } catch {
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+}
 
-  // Hard 5-second deadline — whichever resolves first wins
-  const timeoutPromise = new Promise(resolve =>
-    setTimeout(() => resolve(fallback), 5000)
-  );
+// --- GEMINI TRIAGE ---
+async function runGeminiTriage(incident) {
+  console.log("[ResQNet] Starting Gemini triage...");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+  
+  const prompt = `You are an emergency triage AI.
+Analyze this crisis report and return ONLY valid JSON.
+No explanation. No markdown. No backticks.
 
-  const fetchPromise = (async () => {
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`
-      );
-      if (!res.ok) return fallback;
-      const data = await res.json();
-      return data.display_name || fallback;
-    } catch {
-      return fallback;
-    }
-  })();
+Type: ${incident.type}
+Description: ${incident.description || 'No description'}
+Voice: ${incident.voiceTranscript || 'No voice'}
+Location: ${incident.location}
+Time: ${new Date(incident.timestamp?.toDate()).toISOString()}
 
-  return Promise.race([fetchPromise, timeoutPromise]);
+Return exactly this JSON shape:
+{
+  "level": 1,
+  "levelName": "Critical",
+  "color": "red",
+  "reasoning": "one sentence explaining why",
+  "volunteerTypes": ["type1", "type2"],
+  "estimatedMinutes": 10
+}
+
+Level guide:
+1 = Critical (red) — life threatening, immediate
+2 = Severe (orange) — urgent, within 1 hour  
+3 = Moderate (yellow) — serious but stable
+4 = Minor (green) — can wait several hours
+5 = Monitoring (gray) — informational only`;
+
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  
+  const data = await res.json();
+  const text = data.candidates[0].content.parts[0].text;
+  const clean = text.replace(/```json|```/g, '').trim();
+  const result = JSON.parse(clean);
+  console.log(`[ResQNet] Gemini response received: level ${result.level}`);
+  return result;
 }
 
 // --- VOICE CAPTURE (Issue 2: tap-to-record, user-initiated) ---
@@ -294,13 +339,15 @@ submitBtn.addEventListener('click', async () => {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Sending...';
 
+  console.log("[ResQNet] SOS submitted, writing to Firestore...");
+
   try {
     // Guarantee location is always a real string — never a placeholder
     const safeLocation = (currentAddress && currentAddress !== 'Locating...')
       ? currentAddress
       : currentCoords
         ? formatCoords(currentCoords.lat, currentCoords.lng)
-        : 'Location unavailable';
+        : 'Unknown location';
 
     const docRef = await addDoc(collection(db, 'incidents'), {
       type: selectedCategory,
@@ -318,8 +365,34 @@ submitBtn.addEventListener('click', async () => {
     myHistory.push(docRef.id);
     sessionStorage.setItem('myIncidents', JSON.stringify(myHistory));
 
-    // Success — redirect to coordinator dashboard
-    window.location.href = 'coordinator.html';
+    console.log(`[ResQNet] Firestore write success, id: ${docRef.id}`);
+
+    // Trigger Gemini Triage asynchronously (don't await it so UI isn't blocked)
+    runGeminiTriage({
+      type: selectedCategory,
+      description: incidentDesc.value,
+      location: safeLocation,
+      voiceTranscript: voiceTranscript,
+      timestamp: { toDate: () => new Date() } // Mock timestamp for triage since serverTimestamp() takes time
+    }).then(result => {
+      updateDoc(docRef, {
+        triageLevel: result.level,
+        triageLevelName: result.levelName,
+        triageColor: result.color,
+        triageReasoning: result.reasoning,
+        volunteerTypes: result.volunteerTypes,
+        estimatedMinutes: result.estimatedMinutes,
+        triageComplete: true
+      }).then(() => {
+        console.log("[ResQNet] Firestore triage update complete");
+      });
+    }).catch(err => {
+      console.error("[ResQNet] Gemini triage failed:", err);
+    });
+
+    // Success — show modal
+    categoryModal.style.display = 'none';
+    if (successModal) successModal.style.display = 'flex';
 
   } catch (e) {
     console.error('[Submit] Firestore write failed:', e);
@@ -330,6 +403,28 @@ submitBtn.addEventListener('click', async () => {
     submitBtn.textContent = 'Send SOS Report';
   }
 });
+
+// Submit another report logic
+if (btnSubmitAnother) {
+  btnSubmitAnother.addEventListener('click', () => {
+    successModal.style.display = 'none';
+    
+    // Reset form states
+    selectedCategory = null;
+    voiceTranscript = "";
+    incidentDesc.value = "";
+    updateVoiceUI("");
+    catBtns.forEach(btn => btn.classList.remove('selected'));
+    
+    // Reset SOS button state
+    isHolding = false;
+    clearTimeout(holdTimer);
+    sosBtn.classList.remove('holding', 'complete');
+    sosProgress.style.strokeDashoffset = '314';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send SOS Report';
+  });
+}
 
 // --- REAL-TIME FEED (reporter page sidebar stats) ---
 function listenToIncidents() {
