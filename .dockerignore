@@ -1,0 +1,7 @@
+.git
+Dockerfile
+.dockerignore
+firebase.json
+firestore.rules
+README.md
+LICENSE
