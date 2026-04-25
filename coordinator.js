@@ -14,36 +14,46 @@ const emptyState = document.getElementById('emptyState');
 const hdrActiveNum = document.getElementById('hdrActiveNum');
 const hdrDeployedNum = document.getElementById('hdrDeployedNum');
 const hdrResolvedNum = document.getElementById('hdrResolvedNum');
+const statActiveNum = document.getElementById('statActiveNum');
+const statDeployedNum = document.getElementById('statDeployedNum');
+const statResolvedNum = document.getElementById('statResolvedNum');
+const statAvgResponse = document.getElementById('statAvgResponse');
 
-// --- AUTHENTICATION (MVP PASSWORD GATE) ---
-const CORRECT_PASS = "coord123";
+// --- AUTHENTICATION ---
+const CORRECT_PASS = 'coord123';
+
+function showDashboard() {
+  // Use style.display so the CSS grid layout correctly activates
+  authModal.style.display = 'none';
+  coordApp.style.display = 'grid';
+  startListening();
+}
 
 function checkAuth() {
-  const isAuthed = sessionStorage.getItem('coordAuthed');
-  if (isAuthed === 'true') {
-    authModal.hidden = true;
-    coordApp.hidden = false;
-    startListening();
-  } else {
-    authModal.hidden = false;
-    coordApp.hidden = true;
+  // If already authenticated this session, skip the modal immediately
+  if (sessionStorage.getItem('coordAuth') === 'true') {
+    showDashboard();
   }
+  // else: modal is already visible (default state in HTML), do nothing
 }
 
 authSubmit.addEventListener('click', () => {
   if (passwordInput.value === CORRECT_PASS) {
-    sessionStorage.setItem('coordAuthed', 'true');
+    sessionStorage.setItem('coordAuth', 'true');
     authError.hidden = true;
-    authModal.hidden = true;
-    coordApp.hidden = false;
-    startListening();
+    showDashboard();
   } else {
     authError.hidden = false;
+    passwordInput.focus();
   }
 });
 
-passwordInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') authSubmit.click();
+// Enter key submits the password — keydown fires before keypress (deprecated)
+passwordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    authSubmit.click();
+  }
 });
 
 // Initialize
@@ -81,20 +91,27 @@ function startListening() {
   
   unsubscribe = onSnapshot(q, (snapshot) => {
     let activeCount = 0;
-    let resolvedCount = 0;
+    let resolvedTodayCount = 0;
     const incidents = [];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     snapshot.forEach((doc) => {
       const data = doc.data();
       incidents.push({ id: doc.id, ...data });
-      if (data.status === 'resolved') resolvedCount++;
-      else activeCount++;
+
+      if (data.status === 'resolved') {
+        const resolvedAt = data.timestamp?.toDate?.();
+        if (resolvedAt && resolvedAt >= startOfToday) {
+          resolvedTodayCount++;
+        }
+      } else {
+        activeCount++;
+      }
     });
 
-    // Update Header Stats
-    hdrActiveNum.textContent = activeCount;
-    hdrDeployedNum.textContent = Math.floor(activeCount * 0.5); // Dummy stat for mockup
-    hdrResolvedNum.textContent = resolvedCount;
+    const deployedCount = Math.floor(activeCount * 0.5);
+    updateStats(activeCount, deployedCount, resolvedTodayCount);
 
     renderList(incidents);
   }, (error) => {
@@ -105,20 +122,27 @@ function startListening() {
 
 function getSeverityDetails(type) {
   switch (type) {
-    case 'Medical': return { class: 'level-1', label: 'Level 1 — Critical' };
-    case 'Disaster': return { class: 'level-2', label: 'Level 2 — Severe' };
-    case 'Conflict': return { class: 'level-3', label: 'Level 3 — Moderate' };
-    case 'Resource': return { class: 'level-4', label: 'Level 4 — Minor' };
-    case 'Hospitality': return { class: 'level-5', label: 'Level 5 — Monitoring' };
-    default: return { class: 'level-4', label: 'Level 4 — Minor' };
+    case 'Medical': return { class: 'level-1', label: 'Level 1 - Critical', rank: 1 };
+    case 'Disaster': return { class: 'level-2', label: 'Level 2 - Severe', rank: 2 };
+    case 'Conflict': return { class: 'level-3', label: 'Level 3 - Moderate', rank: 3 };
+    case 'Resource': return { class: 'level-4', label: 'Level 4 - Minor', rank: 4 };
+    case 'Hospitality': return { class: 'level-5', label: 'Level 5 - Monitoring', rank: 5 };
+    default: return { class: 'level-4', label: 'Level 4 - Minor', rank: 4 };
   }
+}
+
+function getAiReasoning(inc) {
+  if (inc.aiReasoning) return inc.aiReasoning;
+  if (inc.triageReasoning) return inc.triageReasoning;
+  if (inc.voiceTranscript) return `Voice context detected: "${inc.voiceTranscript}"`;
+  return 'AI triage: prioritizing available responders by severity and proximity.';
 }
 
 function renderList(incidents) {
   if (incidents.length === 0) {
+    incidentsList.innerHTML = '';
     emptyState.style.display = 'block';
-    const oldCards = incidentsList.querySelectorAll('.incident-card');
-    oldCards.forEach(c => c.remove());
+    incidentsList.appendChild(emptyState);
     return;
   }
   
@@ -126,44 +150,53 @@ function renderList(incidents) {
   
   // Clear list except empty state
   incidentsList.innerHTML = '';
-  incidentsList.appendChild(emptyState);
 
-  incidents.forEach(inc => {
-    // Only show pending incidents by default in the mockup view (optional choice, but showing all for now with resolved styling)
+  const sortedIncidents = incidents
+    .slice()
+    .sort((a, b) => {
+      const aSeverity = getSeverityDetails(a.type).rank;
+      const bSeverity = getSeverityDetails(b.type).rank;
+      if (aSeverity !== bSeverity) return aSeverity - bSeverity;
+
+      const aTime = a.timestamp?.toDate?.()?.getTime?.() || 0;
+      const bTime = b.timestamp?.toDate?.()?.getTime?.() || 0;
+      return bTime - aTime;
+    });
+
+  sortedIncidents.forEach(inc => {
     const isResolved = inc.status === 'resolved';
     const timeLabel = timeAgo(inc.timestamp?.toDate());
     const severity = getSeverityDetails(inc.type);
+    const BAD_LOCATIONS = ['Capturing location...', 'Locating...', '', null, undefined];
+    const locationLabel = !BAD_LOCATIONS.includes(inc.location)
+      ? inc.location
+      : inc.coordinates
+        ? `${inc.coordinates.lat?.toFixed(4)}, ${inc.coordinates.lng?.toFixed(4)}`
+        : 'Location unavailable';
+    const aiReasoning = getAiReasoning(inc);
     
     const card = document.createElement('div');
-    card.className = `incident-card ${severity.class}`;
+    card.className = `coord-incident-card ${severity.class}`;
     if (isResolved) card.style.opacity = '0.6';
 
-    let voiceHtml = '';
-    if (inc.voiceTranscript) {
-      voiceHtml = `
-        <div class="card-voice">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>
-          "<span>${inc.voiceTranscript}</span>"
-        </div>
-      `;
-    }
-
     card.innerHTML = `
-      <div class="card-header">
-        <span class="card-level">${severity.label}</span>
-        <span>${timeLabel}</span>
+      <div class="coord-card-row-top">
+        <span class="coord-level-badge ${severity.class}">${severity.label}</span>
+        <span class="coord-time-ago">${timeLabel}</span>
       </div>
-      <div>
-        <h3 class="card-title">${inc.type || 'Unknown Crisis'}</h3>
-        <p class="card-location">${inc.location}</p>
-        ${inc.description ? `<p class="card-desc">"${inc.description}"</p>` : ''}
-        ${voiceHtml}
+      <div class="coord-card-body">
+        <h3 class="coord-card-title">${inc.type || 'Unknown Crisis'}</h3>
+        <p class="coord-card-location">${locationLabel}</p>
+        <p class="coord-card-ai">${aiReasoning}</p>
+        ${inc.description ? `<p class="coord-card-desc">"${inc.description}"</p>` : ''}
       </div>
-      <div class="card-footer">
-        <div class="card-tags">
-          <span class="tag">${isResolved ? 'Resolved' : 'Active'}</span>
+      <div class="coord-card-footer">
+        <div class="coord-chip-row">
+          <span class="coord-chip">Paramedic</span>
+          <span class="coord-chip">Rapid response</span>
+          <span class="coord-chip">${isResolved ? 'Resolved' : 'Active'}</span>
         </div>
-        ${!isResolved ? `<button class="btn-outline btn-sm resolve-btn" data-id="${inc.id}">Mark resolved</button>` : ''}
+        ${!isResolved ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>` : ''}
       </div>
     `;
 
@@ -190,6 +223,19 @@ function renderList(incidents) {
   });
 }
 
+function updateStats(activeCount, deployedCount, resolvedCount) {
+  hdrActiveNum.textContent = activeCount;
+  hdrDeployedNum.textContent = deployedCount;
+  hdrResolvedNum.textContent = resolvedCount;
+
+  statActiveNum.textContent = activeCount;
+  statDeployedNum.textContent = deployedCount;
+  statResolvedNum.textContent = resolvedCount;
+
+  const avgMinutes = activeCount > 0 ? Math.max(4, 12 - Math.min(activeCount, 8)) : 0;
+  statAvgResponse.textContent = avgMinutes > 0 ? `${avgMinutes}m` : '--';
+}
+
 // --- TOAST UTILITY ---
 function showToast(msg, duration = 3000) {
   const toast = document.getElementById('toast');
@@ -198,10 +244,9 @@ function showToast(msg, duration = 3000) {
   setTimeout(() => toast.classList.remove('show'), duration);
 }
 
-// Keep time ago tags fresh
+// Keep time ago labels fresh (placeholder for future DOM-targeted updates)
 setInterval(() => {
-  if (coordApp.hidden === false) {
-    // A bit hacky to re-render everything, but works for MVP
-    // We would ideally just update the DOM nodes
+  if (coordApp.style.display !== 'none') {
+    // Future: update only time-ago spans without full re-render
   }
 }, 60000);

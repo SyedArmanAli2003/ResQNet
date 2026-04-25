@@ -124,9 +124,10 @@
       <h2 class="modal-title">What's the crisis?</h2>
       <p id="gpsStatus" class="modal-gps">📍 GPS captured</p>
 
+      <!-- Voice banner: shown during mic capture -->
       <div id="voiceBanner" class="voice-banner" hidden>
         <div class="voice-pulse"></div>
-        <span id="voiceStatusText">🎙 Listening for 5s... speak now</span>
+        <span id="voiceStatusText">🎙 Requesting mic...</span>
       </div>
 
       <div class="category-grid">
@@ -138,6 +139,9 @@
       </div>
 
       <textarea id="incidentDesc" class="modal-textarea" placeholder="Add a short description (optional)..."></textarea>
+
+      <!-- Visible error message shown on Firestore write failure -->
+      <p id="submitError" style="display:none;color:#ff6b6b;font-size:13px;margin-bottom:8px;text-align:center;"></p>
 
       <div class="modal-footer">
         <button id="submitIncident" class="btn-primary">Send SOS Report</button>

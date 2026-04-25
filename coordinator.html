@@ -11,80 +11,96 @@
 </head>
 <body class="coord-page">
 
-<!-- ── PASSWORD GATE MODAL ─────────────────────────── -->
 <div id="authModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="authTitle">
   <div class="modal-box auth-box">
     <div class="auth-icon">🔐</div>
     <h2 id="authTitle" class="modal-title">Coordinator Access</h2>
     <p class="modal-sub">Enter the coordinator password to proceed</p>
-    <input id="passwordInput" type="password" class="auth-input" placeholder="Password…" autocomplete="current-password" />
+    <input id="passwordInput" type="password" class="auth-input" placeholder="Password..." autocomplete="current-password" />
     <p id="authError" class="auth-error" hidden>Incorrect password. Try again.</p>
     <button id="authSubmit" class="btn-primary btn-full">Enter Dashboard</button>
-    <a href="index.html" class="btn-ghost" style="display:block;text-align:center;margin-top:.5rem;">← Back to Reporter</a>
+    <a href="index.html" class="btn-ghost" style="display:block;text-align:center;margin-top:.5rem;">Back to Reporter</a>
   </div>
 </div>
 
-<!-- ── COORDINATOR LAYOUT ──────────────────────────── -->
-<div id="coordApp" class="coord-app" hidden>
+<div id="coordApp" class="coord-layout" style="display:none">
+  <aside class="coord-sidebar">
+    <div>
+      <div class="coord-brand">
+        <span class="coord-logo">ResQNet</span>
+        <span class="coord-sub">Crisis response platform</span>
+      </div>
 
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="nav-brand">
-      <span class="nav-logo">ResQNet</span>
-      <span class="nav-sub">Crisis response platform</span>
+      <nav class="coord-nav">
+        <a href="#" class="coord-nav-link active"><span class="coord-dot coord-dot-red"></span>Live incidents</a>
+        <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-teal"></span>Volunteers</a>
+        <a href="index.html" class="coord-nav-link"><span class="coord-dot coord-dot-blue"></span>Report a need</a>
+        <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-gray"></span>History</a>
+        <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-gray"></span>Settings</a>
+      </nav>
     </div>
 
-    <nav class="sidebar-nav">
-      <a href="#" class="sidebar-link active" id="navLive">
-        <span class="dot dot-critical"></span>Live incidents
-      </a>
-      <a href="#" class="sidebar-link" id="navVolunteers">
-        <span class="dot dot-minor"></span>Volunteers
-      </a>
-      <a href="index.html" class="sidebar-link">
-        <span class="dot dot-moderate"></span>Report a need
-      </a>
-      <a href="#" class="sidebar-link" id="navHistory">
-        <span class="dot dot-monitor"></span>History
-      </a>
-      <a href="#" class="sidebar-link" id="navSettings">
-        <span class="dot dot-monitor"></span>Settings
-      </a>
-    </nav>
-
-    <button id="logoutBtn" class="btn-outline btn-sm sidebar-logout">Coordinator view ↗</button>
+    <div class="coord-badge">Coordinator view</div>
   </aside>
 
-  <!-- Main content -->
-  <div class="coord-main">
-
-    <!-- Top bar -->
-    <header class="coord-header">
-      <div>
-        <h1 class="page-title">Live incidents</h1>
+  <main class="coord-main">
+    <header class="coord-topbar">
+      <h1 class="coord-title">Live incidents</h1>
+      <div class="coord-topbar-right">
+        <div class="coord-pill"><span id="hdrActiveNum">0</span> active</div>
+        <div class="coord-pill"><span id="hdrDeployedNum">0</span> deployed</div>
+        <div class="coord-pill"><span id="hdrResolvedNum">0</span> resolved today</div>
+        <a href="index.html" class="coord-new-btn">+ New SOS</a>
       </div>
-      <div class="header-stats">
-        <div class="badge-stat" id="hdrActive"><span id="hdrActiveNum">0</span> active</div>
-        <div class="badge-stat badge-deployed" id="hdrDeployed"><span id="hdrDeployedNum">0</span> deployed</div>
-        <div class="badge-stat badge-resolved" id="hdrResolved"><span id="hdrResolvedNum">0</span> resolved today</div>
-      </div>
-      <a href="index.html" class="btn-primary btn-sm">+ New SOS</a>
     </header>
 
-    <!-- Incidents list -->
-    <div class="incidents-wrap">
-      <p class="sort-label">SORTED BY SEVERITY</p>
-      <div id="incidentsList" class="incidents-list">
-        <div class="empty-state" id="emptyState">
-          <div class="empty-icon">📡</div>
-          <p>Listening for incidents…</p>
+    <section class="coord-feed">
+      <p class="coord-sort">SORTED BY SEVERITY</p>
+      <div id="incidentsList" class="coord-incidents-list">
+        <div class="coord-empty-state" id="emptyState">
+          <div class="coord-empty-icon">📡</div>
+          <p>Listening for incidents...</p>
           <small>New reports will appear here in real time.</small>
         </div>
       </div>
-    </div>
+    </section>
+  </main>
 
-  </div><!-- /coord-main -->
-</div><!-- /coordApp -->
+  <aside class="coord-rightpanel">
+    <section class="coord-sos-panel">
+      <a href="index.html" class="coord-sos-circle" aria-label="Open SOS reporter">SOS</a>
+      <p class="coord-sos-subtitle">Emergency report</p>
+      <p class="coord-sos-hint">Hold button 2 seconds - GPS auto-captured</p>
+    </section>
+
+    <section>
+      <h3 class="coord-section-label">TODAY'S STATS</h3>
+      <div class="coord-stats-grid">
+        <div class="coord-stat-box"><span id="statActiveNum" class="coord-stat-val">0</span><span class="coord-stat-label">Active</span></div>
+        <div class="coord-stat-box"><span id="statDeployedNum" class="coord-stat-val">0</span><span class="coord-stat-label">Deployed</span></div>
+        <div class="coord-stat-box"><span id="statResolvedNum" class="coord-stat-val">0</span><span class="coord-stat-label">Resolved</span></div>
+        <div class="coord-stat-box"><span id="statAvgResponse" class="coord-stat-val">--</span><span class="coord-stat-label">Avg response</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h3 class="coord-section-label">TRIAGE LEVELS</h3>
+      <ul class="coord-legend">
+        <li><span class="coord-dot coord-dot-red"></span>Level 1 - Critical</li>
+        <li><span class="coord-dot coord-dot-orange"></span>Level 2 - Severe</li>
+        <li><span class="coord-dot coord-dot-yellow"></span>Level 3 - Moderate</li>
+        <li><span class="coord-dot coord-dot-green"></span>Level 4 - Minor</li>
+        <li><span class="coord-dot coord-dot-gray"></span>Level 5 - Monitoring</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<nav class="coord-mobile-tabs" aria-label="Mobile navigation">
+  <a href="#" class="coord-mobile-tab active">Incidents</a>
+  <a href="index.html" class="coord-mobile-tab">Report</a>
+  <a href="#" class="coord-mobile-tab">Settings</a>
+</nav>
 
 <!-- ══ TOAST ═══════════════════════════════════════════ -->
 <div id="toast" class="toast" role="alert" aria-live="polite"></div>

@@ -17,6 +17,7 @@ const categoryModal = document.getElementById('categoryModal');
 const gpsStatus = document.getElementById('gpsStatus');
 const voiceBanner = document.getElementById('voiceBanner');
 const voiceStatusText = document.getElementById('voiceStatusText');
+const submitError = document.getElementById('submitError');
 const catBtns = document.querySelectorAll('.cat-btn');
 const incidentDesc = document.getElementById('incidentDesc');
 const submitBtn = document.getElementById('submitIncident');
@@ -29,9 +30,13 @@ const resolvedCountEl = document.getElementById('resolvedCount');
 let holdTimer = null;
 let isHolding = false;
 let currentCoords = null;
-let currentAddress = "Capturing location...";
+let currentAddress = null;   // null until GPS resolves — never store placeholder strings
 let selectedCategory = null;
 let voiceTranscript = "";
+
+function formatCoords(lat, lng) {
+  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
 
 // Initialize
 async function init() {
@@ -51,48 +56,108 @@ async function getPosition() {
 }
 
 async function reverseGeocode(lat, lng) {
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-    const data = await res.json();
-    return data.display_name || "Location found";
-  } catch (e) {
-    return `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
-  }
+  const fallback = formatCoords(lat, lng);
+
+  // Hard 5-second deadline — whichever resolves first wins
+  const timeoutPromise = new Promise(resolve =>
+    setTimeout(() => resolve(fallback), 5000)
+  );
+
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`
+      );
+      if (!res.ok) return fallback;
+      const data = await res.json();
+      return data.display_name || fallback;
+    } catch {
+      return fallback;
+    }
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
 }
 
-// --- VOICE RECORDING (5 SECONDS) ---
-function startVoiceCapture() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.log("Speech Recognition not supported.");
+// --- VOICE CAPTURE (Issue 4: getUserMedia first, then SpeechRecognition + countdown) ---
+async function startVoiceCapture() {
+  voiceTranscript = '';
+  voiceBanner.hidden = false;
+  voiceStatusText.textContent = '\uD83C\uDF99 Requesting mic permission...';
+  console.log('[Voice] Step 1: Requesting mic permission via getUserMedia');
+
+  // Step 1 — Force the mic permission popup
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    console.log('[Voice] mic permission granted');
+  } catch (err) {
+    console.log('[Voice] mic permission denied or unavailable:', err.message);
+    voiceStatusText.textContent = 'Voice capture unavailable \u2014 tap Send to continue without it';
+    setTimeout(() => { voiceBanner.hidden = true; }, 4000);
     return;
   }
 
+  // Step 2 — Check SpeechRecognition support
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.log('[Voice] SpeechRecognition not supported in this browser');
+    voiceStatusText.textContent = 'Voice capture unavailable \u2014 tap Send to continue without it';
+    stream.getTracks().forEach(t => t.stop());
+    setTimeout(() => { voiceBanner.hidden = true; }, 4000);
+    return;
+  }
+
+  // Step 3 — Start recognition
   const recognition = new SpeechRecognition();
   recognition.lang = 'en-US';
-  recognition.continuous = false;
   recognition.interimResults = false;
-
-  voiceBanner.hidden = false;
-  voiceStatusText.textContent = "🎙 Listening for 5s... speak now";
-  voiceTranscript = "";
+  recognition.maxAlternatives = 1;
 
   recognition.onresult = (event) => {
     voiceTranscript = event.results[0][0].transcript;
-    voiceStatusText.textContent = `🎙 "${voiceTranscript}"`;
+    console.log('[Voice] transcript received:', voiceTranscript);
+    voiceStatusText.textContent = `\uD83C\uDF99 Heard: "${voiceTranscript}"`;
   };
 
-  recognition.onerror = () => {
-    voiceStatusText.textContent = "🎙 Recording failed.";
+  recognition.onerror = (event) => {
+    console.log('[Voice] recognition error:', event.error);
+    voiceStatusText.textContent = 'Voice capture unavailable \u2014 tap Send to continue without it';
   };
 
-  recognition.start();
-
-  // Stop after 5 seconds
-  setTimeout(() => {
-    recognition.stop();
+  recognition.onend = () => {
+    console.log('[Voice] recognition ended');
+    stream.getTracks().forEach(t => t.stop()); // release mic
+    // Keep banner visible 2s after end so user sees result
     setTimeout(() => { voiceBanner.hidden = true; }, 2000);
-  }, 5000);
+  };
+
+  try {
+    recognition.start();
+    console.log('[Voice] recognition started');
+  } catch (err) {
+    console.log('[Voice] failed to start recognition:', err.message);
+    voiceStatusText.textContent = 'Voice capture unavailable \u2014 tap Send to continue without it';
+    stream.getTracks().forEach(t => t.stop());
+    setTimeout(() => { voiceBanner.hidden = true; }, 3000);
+    return;
+  }
+
+  // Step 4 — 5-second visual countdown
+  let seconds = 5;
+  voiceStatusText.textContent = `\uD83C\uDF99 Speak now... ${seconds}`;
+  const countdown = setInterval(() => {
+    seconds--;
+    if (seconds > 0) {
+      voiceStatusText.textContent = `\uD83C\uDF99 Speak now... ${seconds}`;
+    } else {
+      clearInterval(countdown);
+      voiceStatusText.textContent = voiceTranscript
+        ? `\uD83C\uDF99 Heard: "${voiceTranscript}"`
+        : '\uD83C\uDF99 No speech detected';
+      try { recognition.stop(); } catch (_) {}
+    }
+  }, 1000);
 }
 
 // --- SOS HOLD LOGIC ---
@@ -122,16 +187,27 @@ window.addEventListener('pointercancel', endHold);
 async function triggerSOS() {
   categoryModal.hidden = false;
   gpsStatus.textContent = "📍 Capturing GPS...";
-  
+  currentCoords = null;
+  currentAddress = null;
+
   try {
     const pos = await getPosition();
     currentCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    currentAddress = await reverseGeocode(currentCoords.lat, currentCoords.lng);
-    gpsStatus.textContent = `📍 ${currentAddress}`;
-    
-    // Start voice recording after GPS
+    // Show raw coords immediately so user sees something while geocoding runs
+    const rawCoords = formatCoords(currentCoords.lat, currentCoords.lng);
+    gpsStatus.textContent = `📍 ${rawCoords}`;
+    currentAddress = rawCoords;
+
+    // Reverse-geocode with built-in 5-second timeout
+    const resolved = await reverseGeocode(currentCoords.lat, currentCoords.lng);
+    currentAddress = resolved;
+    gpsStatus.textContent = `📍 ${resolved}`;
+
+    // Start voice recording after GPS is confirmed
     startVoiceCapture();
   } catch (err) {
+    currentCoords = null;
+    currentAddress = "Location unavailable";
     gpsStatus.textContent = "📍 GPS permission denied.";
   }
 }
@@ -159,33 +235,45 @@ function resetModal() {
 
 submitBtn.addEventListener('click', async () => {
   if (!selectedCategory) {
-    showToast("Please select a category");
+    showToast('Please select a category');
     return;
   }
 
+  // Clear any previous error
+  submitError.style.display = 'none';
+  submitError.textContent = '';
   submitBtn.disabled = true;
-  submitBtn.textContent = "Sending...";
+  submitBtn.textContent = 'Sending...';
 
   try {
-    await addDoc(collection(db, "incidents"), {
+    // Guarantee location is always a real string — never a placeholder
+    const safeLocation = (currentAddress && currentAddress !== 'Locating...')
+      ? currentAddress
+      : currentCoords
+        ? formatCoords(currentCoords.lat, currentCoords.lng)
+        : 'Location unavailable';
+
+    await addDoc(collection(db, 'incidents'), {
       type: selectedCategory,
       description: incidentDesc.value,
-      location: currentAddress,
+      location: safeLocation,
       coordinates: currentCoords,
       voiceTranscript: voiceTranscript,
       timestamp: serverTimestamp(),
-      status: "pending",
+      status: 'pending',
       triageLevel: null
     });
-    
-    showToast("Report Sent!");
-    categoryModal.hidden = true;
-    resetModal();
+
+    // Success — redirect to coordinator dashboard
+    window.location.href = 'coordinator.html';
+
   } catch (e) {
-    showToast("Failed to report.");
-  } finally {
+    console.error('[Submit] Firestore write failed:', e);
+    // Show visible red error on screen — never leave button stuck
+    submitError.textContent = '\u26A0\uFE0F Failed to send report. Check your connection and try again.';
+    submitError.style.display = 'block';
     submitBtn.disabled = false;
-    submitBtn.textContent = "Send SOS Report";
+    submitBtn.textContent = 'Send SOS Report';
   }
 });
 
