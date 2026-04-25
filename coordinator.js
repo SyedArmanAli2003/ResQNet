@@ -1,94 +1,124 @@
-import { db, ensureAuth } from './firebaseConfig.js';
+import { db, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from './firebaseConfig.js';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// DOM Elements
-const authModal = document.getElementById('authModal');
-const passwordInput = document.getElementById('passwordInput');
-const authSubmit = document.getElementById('authSubmit');
-const authError = document.getElementById('authError');
-const coordApp = document.getElementById('coordApp');
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const authModal     = document.getElementById('authModal');
+const emailInput    = document.getElementById('emailInput');
+const passInput     = document.getElementById('passInput');
+const signInBtn     = document.getElementById('signInBtn');
+const authError     = document.getElementById('authError');
+const coordApp      = document.getElementById('coordApp');
+const signOutBtn    = document.getElementById('signOutBtn');
+const userEmailEl   = document.getElementById('userEmail');
 
-const incidentsList = document.getElementById('incidentsList');
-const emptyState = document.getElementById('emptyState');
+const incidentsList  = document.getElementById('incidentsList');
+const emptyState     = document.getElementById('emptyState');
 
-const hdrActiveNum = document.getElementById('hdrActiveNum');
+const hdrActiveNum   = document.getElementById('hdrActiveNum');
 const hdrDeployedNum = document.getElementById('hdrDeployedNum');
 const hdrResolvedNum = document.getElementById('hdrResolvedNum');
-const statActiveNum = document.getElementById('statActiveNum');
-const statDeployedNum = document.getElementById('statDeployedNum');
-const statResolvedNum = document.getElementById('statResolvedNum');
-const statAvgResponse = document.getElementById('statAvgResponse');
+const statActiveNum  = document.getElementById('statActiveNum');
+const statDeployedNum= document.getElementById('statDeployedNum');
+const statResolvedNum= document.getElementById('statResolvedNum');
+const statAvgResponse= document.getElementById('statAvgResponse');
 
-// --- AUTHENTICATION ---
-const CORRECT_PASS = 'coord123';
+// ── AUTH — Firebase email/password ───────────────────────────────────────────
 
-function showDashboard() {
-  // Use style.display so the CSS grid layout correctly activates
+function showDashboard(user) {
   authModal.style.display = 'none';
-  coordApp.style.display = 'grid';
+  coordApp.style.display  = 'grid';
+  if (userEmailEl && user) userEmailEl.textContent = user.email || 'Coordinator';
   startListening();
 }
 
-function checkAuth() {
-  // If already authenticated this session, skip the modal immediately
-  if (sessionStorage.getItem('coordAuth') === 'true') {
-    showDashboard();
-  }
-  // else: modal is already visible (default state in HTML), do nothing
+function showLoginForm() {
+  coordApp.style.display  = 'none';
+  authModal.style.display = 'flex';
 }
 
-authSubmit.addEventListener('click', () => {
-  if (passwordInput.value === CORRECT_PASS) {
-    sessionStorage.setItem('coordAuth', 'true');
-    authError.hidden = true;
-    showDashboard();
+// Watch Firebase auth state — the single source of truth
+onAuthStateChanged(auth, (user) => {
+  if (user && !user.isAnonymous) {
+    // Signed in with real account → show dashboard
+    showDashboard(user);
   } else {
-    authError.hidden = false;
-    passwordInput.focus();
+    // Not signed in (or only anonymous) → show login
+    showLoginForm();
   }
 });
 
-// Enter key submits the password — keydown fires before keypress (deprecated)
-passwordInput.addEventListener('keydown', (e) => {
+// Sign in button click
+signInBtn.addEventListener('click', async () => {
+  console.log('attempting login...');
+  const email = emailInput.value.trim();
+  const password = passInput.value;
+  
+  if (!email || !password) {
+    authError.textContent = 'Please enter email and password';
+    authError.style.display = 'block';
+    return;
+  }
+
+  try {
+    authError.style.display = 'none';
+    signInBtn.textContent = 'Signing in...';
+    await signInWithEmailAndPassword(auth, email, password);
+    console.log('login success');
+    // onAuthStateChanged will handle showing dashboard
+  } catch (error) {
+    console.log('auth error: ' + error.code);
+    signInBtn.textContent = 'Sign In';
+    if (error.code === 'auth/user-not-found' || 
+        error.code === 'auth/wrong-password' ||
+        error.code === 'auth/invalid-credential') {
+      authError.textContent = 'Invalid email or password';
+    } else if (error.code === 'auth/too-many-requests') {
+      authError.textContent = 'Too many attempts. Try again later';
+    } else {
+      authError.textContent = 'Error: ' + error.message;
+    }
+    authError.style.display = 'block';
+  }
+});
+
+// Also submit on Enter key
+passInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    authSubmit.click();
+    signInBtn.click();
   }
 });
 
-// Initialize
-async function init() {
-  await ensureAuth();
-  checkAuth();
+// Sign Out button in the sidebar
+if (signOutBtn) {
+  signOutBtn.addEventListener('click', async () => {
+    try {
+      await signOut(auth);
+      // After signOut: onAuthStateChanged will automatically show login form and hide dashboard
+    } catch (error) {
+      console.log('sign out error: ' + error.message);
+    }
+  });
 }
-init();
 
-// --- RELATIVE TIME FORMATTER ---
+// ── RELATIVE TIME ─────────────────────────────────────────────────────────────
 function timeAgo(date) {
   if (!date) return 'just now';
   const seconds = Math.floor((new Date() - date) / 1000);
-  
-  let interval = seconds / 31536000;
-  if (interval > 1) return Math.floor(interval) + " yr ago";
-  interval = seconds / 2592000;
-  if (interval > 1) return Math.floor(interval) + " mo ago";
-  interval = seconds / 86400;
-  if (interval > 1) return Math.floor(interval) + " d ago";
-  interval = seconds / 3600;
-  if (interval > 1) return Math.floor(interval) + " hr ago";
-  interval = seconds / 60;
-  if (interval > 1) return Math.floor(interval) + " min ago";
-  return Math.floor(seconds) + " s ago";
+  if (seconds < 60)  return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds/60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds/3600)}hr ago`;
+  return `${Math.floor(seconds/86400)}d ago`;
 }
 
-// --- DATA LISTENER & RENDERING ---
+// ── DATA LISTENER ─────────────────────────────────────────────────────────────
 let unsubscribe = null;
 
 function startListening() {
-  if (unsubscribe) return;
+  if (unsubscribe) return;  // already listening
 
-  const q = query(collection(db, "incidents"), orderBy("timestamp", "desc"));
-  
+  const q = query(collection(db, 'incidents'), orderBy('timestamp', 'desc'));
+
   unsubscribe = onSnapshot(q, (snapshot) => {
     let activeCount = 0;
     let resolvedTodayCount = 0;
@@ -96,15 +126,13 @@ function startListening() {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      incidents.push({ id: doc.id, ...data });
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      incidents.push({ id: docSnap.id, ...data });
 
       if (data.status === 'resolved') {
-        const resolvedAt = data.timestamp?.toDate?.();
-        if (resolvedAt && resolvedAt >= startOfToday) {
-          resolvedTodayCount++;
-        }
+        const ts = data.timestamp?.toDate?.();
+        if (ts && ts >= startOfToday) resolvedTodayCount++;
       } else {
         activeCount++;
       }
@@ -112,72 +140,65 @@ function startListening() {
 
     const deployedCount = Math.floor(activeCount * 0.5);
     updateStats(activeCount, deployedCount, resolvedTodayCount);
-
     renderList(incidents);
-  }, (error) => {
-    console.error("Error listening to incidents:", error);
-    showToast("Error connecting to real-time feed.");
+
+  }, (err) => {
+    console.error('[Firestore] snapshot error:', err);
+    showToast('Error connecting to real-time feed.');
   });
 }
 
+// ── SEVERITY ──────────────────────────────────────────────────────────────────
 function getSeverityDetails(type) {
   switch (type) {
-    case 'Medical': return { class: 'level-1', label: 'Level 1 - Critical', rank: 1 };
-    case 'Disaster': return { class: 'level-2', label: 'Level 2 - Severe', rank: 2 };
-    case 'Conflict': return { class: 'level-3', label: 'Level 3 - Moderate', rank: 3 };
-    case 'Resource': return { class: 'level-4', label: 'Level 4 - Minor', rank: 4 };
-    case 'Hospitality': return { class: 'level-5', label: 'Level 5 - Monitoring', rank: 5 };
-    default: return { class: 'level-4', label: 'Level 4 - Minor', rank: 4 };
+    case 'Medical':     return { class: 'level-1', label: 'Level 1 — Critical',   rank: 1 };
+    case 'Disaster':    return { class: 'level-2', label: 'Level 2 — Severe',     rank: 2 };
+    case 'Conflict':    return { class: 'level-3', label: 'Level 3 — Moderate',   rank: 3 };
+    case 'Resource':    return { class: 'level-4', label: 'Level 4 — Minor',      rank: 4 };
+    case 'Hospitality': return { class: 'level-5', label: 'Level 5 — Monitoring', rank: 5 };
+    default:            return { class: 'level-4', label: 'Level 4 — Minor',      rank: 4 };
   }
 }
 
 function getAiReasoning(inc) {
-  if (inc.aiReasoning) return inc.aiReasoning;
+  if (inc.aiReasoning)     return inc.aiReasoning;
   if (inc.triageReasoning) return inc.triageReasoning;
-  if (inc.voiceTranscript) return `Voice context detected: "${inc.voiceTranscript}"`;
+  if (inc.voiceTranscript) return `Voice context: "${inc.voiceTranscript}"`;
   return 'AI triage: prioritizing available responders by severity and proximity.';
 }
 
+// ── RENDER ────────────────────────────────────────────────────────────────────
 function renderList(incidents) {
+  incidentsList.innerHTML = '';
+
   if (incidents.length === 0) {
-    incidentsList.innerHTML = '';
     emptyState.style.display = 'block';
     incidentsList.appendChild(emptyState);
     return;
   }
-  
   emptyState.style.display = 'none';
-  
-  // Clear list except empty state
-  incidentsList.innerHTML = '';
 
-  const sortedIncidents = incidents
-    .slice()
-    .sort((a, b) => {
-      const aSeverity = getSeverityDetails(a.type).rank;
-      const bSeverity = getSeverityDetails(b.type).rank;
-      if (aSeverity !== bSeverity) return aSeverity - bSeverity;
+  const sorted = incidents.slice().sort((a, b) => {
+    const rankDiff = getSeverityDetails(a.type).rank - getSeverityDetails(b.type).rank;
+    if (rankDiff !== 0) return rankDiff;
+    return (b.timestamp?.toDate?.()?.getTime?.() || 0) - (a.timestamp?.toDate?.()?.getTime?.() || 0);
+  });
 
-      const aTime = a.timestamp?.toDate?.()?.getTime?.() || 0;
-      const bTime = b.timestamp?.toDate?.()?.getTime?.() || 0;
-      return bTime - aTime;
-    });
-
-  sortedIncidents.forEach(inc => {
+  sorted.forEach(inc => {
     const isResolved = inc.status === 'resolved';
-    const timeLabel = timeAgo(inc.timestamp?.toDate());
-    const severity = getSeverityDetails(inc.type);
-    const BAD_LOCATIONS = ['Capturing location...', 'Locating...', '', null, undefined];
-    const locationLabel = !BAD_LOCATIONS.includes(inc.location)
+    const timeLabel  = timeAgo(inc.timestamp?.toDate());
+    const severity   = getSeverityDetails(inc.type);
+    const BAD_LOCS   = ['Capturing location...', 'Locating...', '', null, undefined];
+    const locationLabel = !BAD_LOCS.includes(inc.location)
       ? inc.location
       : inc.coordinates
         ? `${inc.coordinates.lat?.toFixed(4)}, ${inc.coordinates.lng?.toFixed(4)}`
         : 'Location unavailable';
     const aiReasoning = getAiReasoning(inc);
-    
+
     const card = document.createElement('div');
     card.className = `coord-incident-card ${severity.class}`;
-    if (isResolved) card.style.opacity = '0.6';
+    if (isResolved) card.style.opacity = '0.55';
 
     card.innerHTML = `
       <div class="coord-card-row-top">
@@ -186,7 +207,7 @@ function renderList(incidents) {
       </div>
       <div class="coord-card-body">
         <h3 class="coord-card-title">${inc.type || 'Unknown Crisis'}</h3>
-        <p class="coord-card-location">${locationLabel}</p>
+        <p class="coord-card-location">📍 ${locationLabel}</p>
         <p class="coord-card-ai">${aiReasoning}</p>
         ${inc.description ? `<p class="coord-card-desc">"${inc.description}"</p>` : ''}
       </div>
@@ -194,59 +215,51 @@ function renderList(incidents) {
         <div class="coord-chip-row">
           <span class="coord-chip">Paramedic</span>
           <span class="coord-chip">Rapid response</span>
-          <span class="coord-chip">${isResolved ? 'Resolved' : 'Active'}</span>
+          <span class="coord-chip">${isResolved ? '✅ Resolved' : '🔴 Active'}</span>
         </div>
-        ${!isResolved ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>` : ''}
+        ${!isResolved
+          ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>`
+          : ''}
       </div>
     `;
 
     incidentsList.appendChild(card);
   });
 
-  // Attach event listeners to Resolve buttons
+  // Attach resolve listeners
   document.querySelectorAll('.resolve-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const id = e.target.dataset.id;
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
       btn.disabled = true;
-      btn.textContent = 'Resolving...';
+      btn.textContent = 'Resolving…';
       try {
-        await updateDoc(doc(db, "incidents", id), {
-          status: 'resolved'
-        });
-        showToast("Incident marked as resolved.");
+        await updateDoc(doc(db, 'incidents', id), { status: 'resolved' });
+        showToast('Incident marked as resolved.');
       } catch (err) {
-        showToast("Failed to update status.");
+        showToast('Failed to update status.');
         btn.disabled = false;
-        btn.textContent = 'Mark resolved';
+        btn.textContent = 'Mark Resolved';
       }
     });
   });
 }
 
+// ── STATS ─────────────────────────────────────────────────────────────────────
 function updateStats(activeCount, deployedCount, resolvedCount) {
-  hdrActiveNum.textContent = activeCount;
-  hdrDeployedNum.textContent = deployedCount;
-  hdrResolvedNum.textContent = resolvedCount;
-
-  statActiveNum.textContent = activeCount;
+  hdrActiveNum.textContent    = activeCount;
+  hdrDeployedNum.textContent  = deployedCount;
+  hdrResolvedNum.textContent  = resolvedCount;
+  statActiveNum.textContent   = activeCount;
   statDeployedNum.textContent = deployedCount;
   statResolvedNum.textContent = resolvedCount;
-
-  const avgMinutes = activeCount > 0 ? Math.max(4, 12 - Math.min(activeCount, 8)) : 0;
-  statAvgResponse.textContent = avgMinutes > 0 ? `${avgMinutes}m` : '--';
+  const avg = activeCount > 0 ? Math.max(4, 12 - Math.min(activeCount, 8)) : 0;
+  statAvgResponse.textContent = avg > 0 ? `${avg}m` : '--';
 }
 
-// --- TOAST UTILITY ---
+// ── TOAST ─────────────────────────────────────────────────────────────────────
 function showToast(msg, duration = 3000) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), duration);
 }
-
-// Keep time ago labels fresh (placeholder for future DOM-targeted updates)
-setInterval(() => {
-  if (coordApp.style.display !== 'none') {
-    // Future: update only time-ago spans without full re-render
-  }
-}, 60000);

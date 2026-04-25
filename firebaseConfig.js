@@ -4,7 +4,13 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getAuth,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAgSylHSHd1KRN4SYNqG30cQkrGRfY2CCI",
@@ -17,10 +23,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export const db  = getFirestore(app);
 export const auth = getAuth(app);
 
-// Sign in anonymously so Firestore security rules can reference auth.uid
+// Re-export auth helpers for coordinator login
+export { signInWithEmailAndPassword, signOut, onAuthStateChanged };
+
+// Sign in anonymously — used by reporter page so Firestore rules can reference auth.uid
 export async function ensureAuth() {
   try {
     if (!auth.currentUser) {

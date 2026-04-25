@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResQNet — Report an Emergency</title>
+  <meta name="description" content="ResQNet Reporter — Send an SOS, request resources, or report a crisis in your area." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="dashboard-page">
+
+  <!-- ── SIDEBAR ──────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="nav-brand">
+        <a href="index.html" style="text-decoration:none">
+          <span class="nav-logo">ResQNet</span>
+        </a>
+        <span class="nav-sub">Crisis response platform</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#" class="sidebar-link active" data-section="report">
+          <span class="dot dot-critical"></span>Report emergency
+        </a>
+        <a href="#" class="sidebar-link" data-section="volunteers">
+          <span class="dot dot-minor"></span>Volunteers
+        </a>
+        <a href="#" class="sidebar-link" data-section="resources">
+          <span class="dot dot-moderate"></span>Resources
+        </a>
+        <a href="#" class="sidebar-link" data-section="history">
+          <span class="dot dot-monitor"></span>History
+        </a>
+      </nav>
+    </div>
+
+    <a href="coordinator.html" class="btn-coord-view">Coordinator view →</a>
+  </aside>
+
+  <!-- ── SECTIONS ─────────────────────────────────────────────── -->
+  
+  <div id="section-report" class="section" style="display: contents;">
+    <!-- ── MAIN FEED (CENTER) ───────────────────────────── -->
+  <main class="feed-section">
+    <header class="feed-header">
+      <div class="header-left">
+        <h1 class="page-title">Report a crisis</h1>
+      </div>
+      <div class="header-stats">
+        <div class="badge-stat"><span id="activeCount">0</span> active</div>
+        <div class="badge-stat badge-deployed"><span id="deployedCount">0</span> deployed</div>
+        <div class="badge-stat badge-resolved"><span id="resolvedCount">0</span> resolved today</div>
+      </div>
+    </header>
+
+    <div class="incidents-container">
+      <p class="sort-label">RECENT REPORTS — SORTED BY SEVERITY</p>
+      <div id="incidentsList" class="incidents-list">
+        <!-- Populated by app.js -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ── ACTION PANEL (RIGHT) ─────────────────────────── -->
+  <aside class="action-panel">
+
+    <!-- SOS CARD -->
+    <section class="sos-card">
+      <div class="sos-btn-wrap">
+        <button id="sosBtn" class="sos-circle">
+          <span class="sos-text">SOS</span>
+          <svg class="sos-progress-svg" viewBox="0 0 120 120">
+            <circle class="sos-bg-circle" cx="60" cy="60" r="54" />
+            <circle id="sosProgressCircle" class="sos-fill-circle" cx="60" cy="60" r="54" />
+          </svg>
+        </button>
+      </div>
+      <h2 class="sos-title">Emergency report</h2>
+      <p class="sos-subtitle">Hold button 2 seconds — GPS auto-captured</p>
+    </section>
+
+    <!-- TODAY'S STATS -->
+    <section class="stats-section">
+      <h3 class="panel-label">TODAY'S STATS</h3>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-val" id="statActive">0</span>
+          <span class="stat-label">Active</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val">—</span>
+          <span class="stat-label">Deployed</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val" id="statResolved">0</span>
+          <span class="stat-label">Resolved</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val">9m</span>
+          <span class="stat-label">Avg response</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRIAGE LEVELS -->
+    <section class="triage-section">
+      <h3 class="panel-label">TRIAGE LEVELS</h3>
+      <ul class="triage-list">
+        <li><span class="dot dot-critical"></span> Level 1 — Critical</li>
+        <li><span class="dot dot-severe"></span> Level 2 — Severe</li>
+        <li><span class="dot dot-moderate"></span> Level 3 — Moderate</li>
+        <li><span class="dot dot-minor"></span> Level 4 — Minor</li>
+        <li><span class="dot dot-monitor"></span> Level 5 — Monitoring</li>
+      </ul>
+    </section>
+
+  </aside>
+  </div> <!-- end section-report -->
+
+  <div id="section-volunteers" class="section" style="display: none; grid-column: 2 / 4; padding: 2rem; color: #fff;">
+    <h1 class="page-title" style="margin-bottom: 2rem;">Available Volunteers</h1>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); width: 250px;">
+        <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">Sarah Jenkins <span class="dot dot-minor"></span></h3>
+        <span class="coord-chip">Medical</span>
+      </div>
+      <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); width: 250px;">
+        <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">Mike Ross <span class="dot dot-minor"></span></h3>
+        <span class="coord-chip">Rescue</span>
+      </div>
+      <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); width: 250px;">
+        <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">Elena Rodriguez <span class="dot dot-minor"></span></h3>
+        <span class="coord-chip">Supply</span>
+      </div>
+    </div>
+    <p style="margin-top: 2rem; color: var(--text-dim);">Volunteer registration coming soon...</p>
+  </div>
+
+  <div id="section-resources" class="section" style="display: none; grid-column: 2 / 4; padding: 2rem; color: #fff;">
+    <h1 class="page-title" style="margin-bottom: 2rem;">Community Resources</h1>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); width: 300px; cursor: pointer;">
+        <h3 style="margin-bottom: 0.5rem;">NGO Helpline</h3>
+        <p style="color: var(--accent-red); font-weight: bold;">📞 1800-XXX-XXXX</p>
+      </div>
+      <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); width: 300px; cursor: pointer;">
+        <h3 style="margin-bottom: 0.5rem;">Medical Emergency</h3>
+        <p style="color: var(--accent-red); font-weight: bold;">📞 108</p>
+      </div>
+      <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); width: 300px; cursor: pointer;">
+        <h3 style="margin-bottom: 0.5rem;">Disaster Relief</h3>
+        <p style="color: var(--accent-red); font-weight: bold;">📞 1078</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="section-history" class="section" style="display: none; grid-column: 2 / 4; padding: 2rem; color: #fff;">
+    <h1 class="page-title" style="margin-bottom: 2rem;">My Reports</h1>
+    <div id="historyList" style="display: flex; flex-direction: column; gap: 1rem;">
+      <p style="color: var(--text-dim);">No reports submitted yet.</p>
+    </div>
+  </div>
+
+  <!-- ══ CRISIS CATEGORY MODAL ══════════════════════════ -->
+  <div id="categoryModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h2 class="modal-title">What's the crisis?</h2>
+      <p id="gpsStatus" class="modal-gps">📍 Capturing GPS…</p>
+
+      <!-- Voice recording area: tap-to-record mic button -->
+      <div id="voiceArea" class="voice-area">
+        <button id="micBtn" class="mic-btn" type="button" title="Tap to record">
+          <span class="mic-icon">🎙</span>
+          <span class="mic-label">Tap to record (5 sec)</span>
+        </button>
+        <p id="voiceStatus" class="voice-status-text"></p>
+      </div>
+
+      <div class="category-grid">
+        <button class="cat-btn" data-type="Medical">🏥<span>Medical</span></button>
+        <button class="cat-btn" data-type="Disaster">🌊<span>Disaster</span></button>
+        <button class="cat-btn" data-type="Conflict">⚔️<span>Conflict</span></button>
+        <button class="cat-btn" data-type="Resource">📦<span>Resource</span></button>
+        <button class="cat-btn" data-type="Hospitality">🏠<span>Hospitality</span></button>
+      </div>
+
+      <textarea id="incidentDesc" class="modal-textarea" placeholder="Add a short description (optional)..."></textarea>
+
+      <!-- Visible error shown on Firestore write failure -->
+      <p id="submitError" style="display:none;color:#ff6b6b;font-size:13px;margin-bottom:8px;text-align:center;"></p>
+
+      <div class="modal-footer">
+        <button id="submitIncident" class="btn-primary">Send SOS Report</button>
+        <button id="cancelModal" class="btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

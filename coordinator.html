@@ -11,36 +11,48 @@
 </head>
 <body class="coord-page">
 
+<!-- ── AUTH MODAL (shown until Firebase login succeeds) ── -->
 <div id="authModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="authTitle">
   <div class="modal-box auth-box">
     <div class="auth-icon">🔐</div>
-    <h2 id="authTitle" class="modal-title">Coordinator Access</h2>
-    <p class="modal-sub">Enter the coordinator password to proceed</p>
-    <input id="passwordInput" type="password" class="auth-input" placeholder="Password..." autocomplete="current-password" />
-    <p id="authError" class="auth-error" hidden>Incorrect password. Try again.</p>
-    <button id="authSubmit" class="btn-primary btn-full">Enter Dashboard</button>
-    <a href="index.html" class="btn-ghost" style="display:block;text-align:center;margin-top:.5rem;">Back to Reporter</a>
+    <h2 id="authTitle" class="modal-title">Coordinator Login</h2>
+    <p class="modal-sub">Sign in with your coordinator account</p>
+
+    <input id="emailInput"    type="email"    class="auth-input" placeholder="Email address"  autocomplete="username" />
+    <input id="passInput" type="password" class="auth-input" placeholder="Password"        autocomplete="current-password" style="margin-top:8px" />
+
+    <p id="authError" class="auth-error" style="display:none"></p>
+
+    <button id="signInBtn" class="btn-primary btn-full" style="margin-top:12px">Sign In</button>
+    <a href="index.html" class="btn-ghost" style="display:block;text-align:center;margin-top:.5rem;">← Back to home</a>
   </div>
 </div>
 
+<!-- ── COORDINATOR LAYOUT (hidden until auth) ── -->
 <div id="coordApp" class="coord-layout" style="display:none">
+
   <aside class="coord-sidebar">
     <div>
       <div class="coord-brand">
-        <span class="coord-logo">ResQNet</span>
+        <a href="index.html" style="text-decoration:none">
+          <span class="coord-logo">ResQNet</span>
+        </a>
         <span class="coord-sub">Crisis response platform</span>
       </div>
 
       <nav class="coord-nav">
         <a href="#" class="coord-nav-link active"><span class="coord-dot coord-dot-red"></span>Live incidents</a>
         <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-teal"></span>Volunteers</a>
-        <a href="index.html" class="coord-nav-link"><span class="coord-dot coord-dot-blue"></span>Report a need</a>
+        <a href="reporter.html" class="coord-nav-link"><span class="coord-dot coord-dot-blue"></span>Report a need</a>
         <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-gray"></span>History</a>
         <a href="#" class="coord-nav-link"><span class="coord-dot coord-dot-gray"></span>Settings</a>
       </nav>
     </div>
 
-    <div class="coord-badge">Coordinator view</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="coord-badge" id="userEmail">Coordinator</div>
+      <button id="signOutBtn" class="coord-badge" style="cursor:pointer;border:none;background:#1c1026;color:#c084fc" title="Sign out">Sign out ↗</button>
+    </div>
   </aside>
 
   <main class="coord-main">
@@ -50,7 +62,7 @@
         <div class="coord-pill"><span id="hdrActiveNum">0</span> active</div>
         <div class="coord-pill"><span id="hdrDeployedNum">0</span> deployed</div>
         <div class="coord-pill"><span id="hdrResolvedNum">0</span> resolved today</div>
-        <a href="index.html" class="coord-new-btn">+ New SOS</a>
+        <a href="reporter.html" class="coord-new-btn">+ New SOS</a>
       </div>
     </header>
 
@@ -68,15 +80,15 @@
 
   <aside class="coord-rightpanel">
     <section class="coord-sos-panel">
-      <a href="index.html" class="coord-sos-circle" aria-label="Open SOS reporter">SOS</a>
+      <a href="reporter.html" class="coord-sos-circle" aria-label="Open SOS reporter">SOS</a>
       <p class="coord-sos-subtitle">Emergency report</p>
-      <p class="coord-sos-hint">Hold button 2 seconds - GPS auto-captured</p>
+      <p class="coord-sos-hint">Hold button 2 seconds — GPS auto-captured</p>
     </section>
 
     <section>
       <h3 class="coord-section-label">TODAY'S STATS</h3>
       <div class="coord-stats-grid">
-        <div class="coord-stat-box"><span id="statActiveNum" class="coord-stat-val">0</span><span class="coord-stat-label">Active</span></div>
+        <div class="coord-stat-box"><span id="statActiveNum"  class="coord-stat-val">0</span><span class="coord-stat-label">Active</span></div>
         <div class="coord-stat-box"><span id="statDeployedNum" class="coord-stat-val">0</span><span class="coord-stat-label">Deployed</span></div>
         <div class="coord-stat-box"><span id="statResolvedNum" class="coord-stat-val">0</span><span class="coord-stat-label">Resolved</span></div>
         <div class="coord-stat-box"><span id="statAvgResponse" class="coord-stat-val">--</span><span class="coord-stat-label">Avg response</span></div>
@@ -86,23 +98,23 @@
     <section>
       <h3 class="coord-section-label">TRIAGE LEVELS</h3>
       <ul class="coord-legend">
-        <li><span class="coord-dot coord-dot-red"></span>Level 1 - Critical</li>
-        <li><span class="coord-dot coord-dot-orange"></span>Level 2 - Severe</li>
-        <li><span class="coord-dot coord-dot-yellow"></span>Level 3 - Moderate</li>
-        <li><span class="coord-dot coord-dot-green"></span>Level 4 - Minor</li>
-        <li><span class="coord-dot coord-dot-gray"></span>Level 5 - Monitoring</li>
+        <li><span class="coord-dot coord-dot-red"></span>Level 1 — Critical</li>
+        <li><span class="coord-dot coord-dot-orange"></span>Level 2 — Severe</li>
+        <li><span class="coord-dot coord-dot-yellow"></span>Level 3 — Moderate</li>
+        <li><span class="coord-dot coord-dot-green"></span>Level 4 — Minor</li>
+        <li><span class="coord-dot coord-dot-gray"></span>Level 5 — Monitoring</li>
       </ul>
     </section>
   </aside>
 </div>
 
+<!-- Mobile bottom tabs -->
 <nav class="coord-mobile-tabs" aria-label="Mobile navigation">
   <a href="#" class="coord-mobile-tab active">Incidents</a>
-  <a href="index.html" class="coord-mobile-tab">Report</a>
+  <a href="reporter.html" class="coord-mobile-tab">Report</a>
   <a href="#" class="coord-mobile-tab">Settings</a>
 </nav>
 
-<!-- ══ TOAST ═══════════════════════════════════════════ -->
 <div id="toast" class="toast" role="alert" aria-live="polite"></div>
 
 <script type="module" src="coordinator.js"></script>
