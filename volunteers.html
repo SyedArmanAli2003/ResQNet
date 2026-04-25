@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResQNet — Volunteers</title>
+  <meta name="description" content="ResQNet Volunteers — Register to help or find active volunteers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Scoped styles for standalone pages */
+    .page-layout {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .top-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2rem;
+    }
+    .top-nav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .nav-logo-link {
+      font-size: 1.4rem;
+      font-weight: 700;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+    .back-link {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.95rem;
+      padding: 0.4rem 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: 0.2s;
+    }
+    .back-link:hover {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-main);
+    }
+    .form-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin-bottom: 3rem;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .input-group label {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+    }
+    .form-input {
+      background: var(--bg-deep);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      font-family: inherit;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--text-dim);
+    }
+    .filter-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: 0.2s;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: var(--text-main);
+    }
+    .vol-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .vol-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+    .vol-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 1.2rem;
+      color: var(--text-main);
+      flex-shrink: 0;
+    }
+    .vol-info { flex-grow: 1; }
+    .vol-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.2rem; }
+    .vol-loc { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.8rem; }
+    .vol-status-row { display: flex; align-items: center; justify-content: space-between; }
+    .availability-dot {
+      width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px;
+    }
+    .dot-avail { background: var(--color-minor); box-shadow: 0 0 8px var(--color-minor); }
+    .dot-busy { background: var(--color-critical); box-shadow: 0 0 8px var(--color-critical); }
+  </style>
+</head>
+<body style="overflow-y: auto;">
+
+  <div class="page-layout">
+    <header class="top-nav">
+      <div class="top-nav-left">
+        <a href="index.html" class="nav-logo-link">ResQNet</a>
+        <a href="index.html" class="back-link">← Home</a>
+      </div>
+      <h1 style="font-size: 1.5rem;">Volunteers</h1>
+    </header>
+
+    <main>
+      <section class="form-card">
+        <h2 style="margin-bottom: 1.5rem;">Register as Volunteer</h2>
+        <form id="volForm">
+          <div class="form-grid">
+            <div class="input-group">
+              <label for="volName">Full Name</label>
+              <input type="text" id="volName" class="form-input" required />
+            </div>
+            <div class="input-group">
+              <label for="volPhone">Phone Number</label>
+              <input type="tel" id="volPhone" class="form-input" required />
+            </div>
+            <div class="input-group">
+              <label for="volSkill">Primary Skill</label>
+              <select id="volSkill" class="form-input" required>
+                <option value="Medical">Medical / First Aid</option>
+                <option value="Rescue">Rescue / Extraction</option>
+                <option value="Supply">Supply / Logistics</option>
+                <option value="Coordination">Coordination / Comms</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label for="volLoc">Location <small id="locStatus" style="color:var(--text-dim)">(capturing...)</small></label>
+              <input type="text" id="volLoc" class="form-input" placeholder="Capturing GPS..." required />
+            </div>
+          </div>
+          <div style="display:flex; justify-content: space-between; align-items: center;">
+            <div class="input-group" style="flex-direction:row; align-items:center; gap:0.8rem;">
+              <label for="volAvail" style="color:var(--text-main); font-weight:500;">Currently Available?</label>
+              <input type="checkbox" id="volAvail" checked style="width:18px; height:18px; accent-color:var(--accent-red);" />
+            </div>
+            <button type="submit" id="submitVol" class="btn-primary" style="padding: 0.8rem 2rem;">Register</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h2 style="margin-bottom: 1rem;">Active Volunteers</h2>
+        <div class="filter-row" id="volFilters">
+          <button class="filter-btn active" data-filter="All">All</button>
+          <button class="filter-btn" data-filter="Medical">Medical</button>
+          <button class="filter-btn" data-filter="Rescue">Rescue</button>
+          <button class="filter-btn" data-filter="Supply">Supply</button>
+        </div>
+        
+        <div id="volList" class="vol-list">
+          <p style="color: var(--text-dim); padding: 2rem 0;">Loading volunteers...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="volunteers.js"></script>
+</body>
+</html>

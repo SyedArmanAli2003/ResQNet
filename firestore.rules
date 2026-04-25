@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Anyone can create incidents (anonymous reporters)
+    match /incidents/{id} {
+      allow create: if true;
+      allow read: if true;
+      allow update, delete: if request.auth != null;
+    }
+    
+    // Anyone can read/create volunteers and resources
+    match /volunteers/{id} {
+      allow read, create: if true;
+      allow update, delete: if request.auth != null;
+    }
+    
+    match /resources/{id} {
+      allow read, create: if true;
+      allow update, delete: if request.auth != null;
+    }
+  }
+}

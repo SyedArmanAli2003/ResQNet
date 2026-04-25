@@ -23,6 +23,7 @@
 
     <p id="authError" class="auth-error" style="display:none"></p>
 
+    <p style="color:var(--text-dim); font-size:0.85rem; margin-top: 1rem; margin-bottom: 1rem; text-align: center;">Demo credentials:<br>resqnet.coordinator@gmail.com</p>
     <button id="signInBtn" class="btn-primary btn-full" style="margin-top:12px">Sign In</button>
     <a href="index.html" class="btn-ghost" style="display:block;text-align:center;margin-top:.5rem;">← Back to home</a>
   </div>
@@ -50,8 +51,8 @@
     </div>
 
     <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="coord-badge" id="userEmail">Coordinator</div>
-      <button id="signOutBtn" class="coord-badge" style="cursor:pointer;border:none;background:#1c1026;color:#c084fc" title="Sign out">Sign out ↗</button>
+      <div class="coord-badge" style="font-size:0.8rem; background:transparent; border:none; padding-left:0; color:var(--text-dim);">Logged in as:<br><span id="userEmail" style="color:#fff; font-size:0.85rem;"></span></div>
+      <button id="signOutBtn" class="coord-badge" style="cursor:pointer;border:1px solid #ff444433;background:#2a1111;color:#ff6b6b;text-align:center;justify-content:center;" title="Sign out">Sign out</button>
     </div>
   </aside>
 

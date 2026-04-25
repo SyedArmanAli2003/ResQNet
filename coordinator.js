@@ -64,6 +64,7 @@ signInBtn.addEventListener('click', async () => {
     signInBtn.textContent = 'Signing in...';
     await signInWithEmailAndPassword(auth, email, password);
     console.log('login success');
+    sessionStorage.setItem('coordinatorEmail', email);
     // onAuthStateChanged will handle showing dashboard
   } catch (error) {
     console.log('auth error: ' + error.code);
@@ -94,7 +95,8 @@ if (signOutBtn) {
   signOutBtn.addEventListener('click', async () => {
     try {
       await signOut(auth);
-      // After signOut: onAuthStateChanged will automatically show login form and hide dashboard
+      sessionStorage.removeItem('coordinatorEmail');
+      window.location.href = 'index.html';
     } catch (error) {
       console.log('sign out error: ' + error.message);
     }

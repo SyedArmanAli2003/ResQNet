@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResQNet — History</title>
+  <meta name="description" content="ResQNet History — View all reported incidents and emergencies." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .page-layout { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+    .top-nav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem;
+    }
+    .top-nav-left { display: flex; align-items: center; gap: 1.5rem; }
+    .nav-logo-link { font-size: 1.4rem; font-weight: 700; text-decoration: none; color: var(--text-main); }
+    .back-link {
+      color: var(--text-dim); text-decoration: none; font-size: 0.95rem;
+      padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; transition: 0.2s;
+    }
+    .back-link:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+    
+    .stats-row {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.5rem; text-align: center;
+    }
+    .stat-val { font-size: 2rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem; }
+    .stat-label { font-size: 0.9rem; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .filter-tabs {
+      display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border);
+    }
+    .filter-tab {
+      padding: 0.8rem 1rem; color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; transition: 0.2s;
+    }
+    .filter-tab:hover { color: var(--text-main); }
+    .filter-tab.active { color: var(--text-main); border-bottom-color: var(--accent-red); }
+    
+    .history-list { display: flex; flex-direction: column; gap: 1rem; }
+    .history-card {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.5rem; border-left-width: 4px; display: flex; flex-direction: column; gap: 0.8rem;
+    }
+    .hc-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .hc-title { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.6rem; }
+    .hc-time { font-size: 0.85rem; color: var(--text-dim); }
+    .hc-loc { font-size: 0.9rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.4rem; }
+    .hc-ai { font-size: 0.9rem; color: var(--text-dim); font-style: italic; background: rgba(255,255,255,0.03); padding: 0.8rem; border-radius: 6px; }
+    
+    .status-badge {
+      font-size: 0.8rem; font-weight: 600; padding: 0.3rem 0.6rem; border-radius: 4px; border: 1px solid transparent;
+    }
+    .status-pending { color: #FBC02D; background: rgba(251, 192, 45, 0.1); border-color: rgba(251, 192, 45, 0.3); }
+    .status-resolved { color: #4CAF50; background: rgba(76, 175, 80, 0.1); border-color: rgba(76, 175, 80, 0.3); }
+  </style>
+</head>
+<body style="overflow-y: auto;">
+
+  <div class="page-layout">
+    <header class="top-nav">
+      <div class="top-nav-left">
+        <a href="index.html" class="nav-logo-link">ResQNet</a>
+        <a href="index.html" class="back-link">← Home</a>
+      </div>
+      <h1 style="font-size: 1.5rem;">My Reports</h1>
+    </header>
+
+    <main>
+      <section class="stats-row">
+        <div class="stat-card">
+          <div id="statTotal" class="stat-val">0</div>
+          <div class="stat-label">Total Reports</div>
+        </div>
+        <div class="stat-card">
+          <div id="statPending" class="stat-val" style="color: #FBC02D;">0</div>
+          <div class="stat-label">Pending</div>
+        </div>
+        <div class="stat-card">
+          <div id="statResolved" class="stat-val" style="color: #4CAF50;">0</div>
+          <div class="stat-label">Resolved</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="filter-tabs" id="filterTabs">
+          <div class="filter-tab active" data-status="all">All</div>
+          <div class="filter-tab" data-status="pending">Pending</div>
+          <div class="filter-tab" data-status="resolved">Resolved</div>
+        </div>
+        
+        <div id="historyList" class="history-list">
+          <p style="color: var(--text-dim); padding: 2rem 0;">Loading history...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="history.js"></script>
+</body>
+</html>

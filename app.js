@@ -43,28 +43,10 @@ function formatCoords(lat, lng) {
 
 // Initialize
 async function init() {
-  setupNavigation();
   await ensureAuth();
   listenToIncidents();
 }
 init();
-
-function setupNavigation() {
-  document.querySelectorAll('.sidebar-link').forEach(item => {
-    item.addEventListener('click', (e) => {
-      const target = item.dataset.section;
-      if (!target) return;
-      e.preventDefault();
-      
-      document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-      const sec = document.getElementById('section-' + target);
-      if (sec) sec.style.display = target === 'report' ? 'contents' : 'block';
-      
-      document.querySelectorAll('.sidebar-link').forEach(n => n.classList.remove('active'));
-      item.classList.add('active');
-    });
-  });
-}
 
 // --- GPS & REVERSE GEOCODING ---
 async function getPosition() {
@@ -374,39 +356,6 @@ function listenToIncidents() {
     const statResolvedEl = document.getElementById('statResolved');
     if (statActiveEl)   statActiveEl.textContent  = active;
     if (statResolvedEl) statResolvedEl.textContent = resolved;
-
-    // Render My History
-    const historyList = document.getElementById('historyList');
-    if (historyList) {
-      historyList.innerHTML = '';
-      const myHistory = JSON.parse(sessionStorage.getItem('myIncidents') || '[]');
-      let hasHistory = false;
-      
-      snapshot.forEach(docSnap => {
-        if (myHistory.includes(docSnap.id)) {
-          hasHistory = true;
-          const inc = docSnap.data();
-          const severity = getSeverity(inc.type);
-          const time = inc.timestamp ? inc.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now";
-          const typeIcon = getTypeIcon(inc.type);
-          
-          historyList.innerHTML += `
-            <div style="background: var(--bg-surface); padding: 1rem; border-radius: 8px; border-left: 4px solid ${severity.color};">
-               <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; align-items:center;">
-                 <strong style="font-size: 1.1rem;">${typeIcon} ${inc.type} emergency</strong>
-                 <span style="color:var(--text-dim); font-size:0.85rem">${time}</span>
-               </div>
-               <p style="color:var(--text-dim); font-size:0.9rem; margin-bottom:0.8rem">📍 ${inc.location}</p>
-               <span class="coord-chip" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 0.8rem;">Status: ${inc.status}</span>
-            </div>
-          `;
-        }
-      });
-      
-      if (!hasHistory) {
-        historyList.innerHTML = '<p style="color: var(--text-dim);">No reports submitted yet.</p>';
-      }
-    }
   });
 }
 
