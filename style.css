@@ -469,9 +469,21 @@ body.coord-page {
 }
 
 .coord-incidents-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.coord-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-dim);
+}
+
+.coord-empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
 }
 
 .coord-incident-card {
@@ -503,6 +515,20 @@ body.coord-page {
 .coord-level-badge.level-1 { color: #ffd6d6; background: rgba(229,57,53,0.18); border-color: rgba(229,57,53,0.45); }
 .coord-level-badge.level-2 { color: #ffe3cd; background: rgba(245,124,0,0.17); border-color: rgba(245,124,0,0.35); }
 .coord-level-badge.level-3 { color: #fff2c4; background: rgba(251,192,45,0.15); border-color: rgba(251,192,45,0.35); }
+
+.coord-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: coord-spin 1s ease-in-out infinite;
+}
+
+@keyframes coord-spin {
+  to { transform: rotate(360deg); }
+}
 
 .coord-time-ago {
   color: var(--text-muted);

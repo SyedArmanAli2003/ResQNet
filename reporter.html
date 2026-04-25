@@ -161,7 +161,16 @@
     <div class="modal-box" style="text-align: center; padding: 3rem;">
       <div style="font-size: 4rem; color: var(--accent-green); margin-bottom: 1rem;">✓</div>
       <h2 style="margin-bottom: 1rem; color: var(--text-main);">Report submitted</h2>
-      <p style="color: var(--text-dim); margin-bottom: 2rem;">Your emergency has been reported.<br>Coordinators have been alerted.</p>
+      <p style="color: var(--text-dim); margin-bottom: 1rem;">Report submitted. AI is analyzing...<br>Coordinators have been alerted.</p>
+      
+      <!-- Placeholder for AI result -->
+      <div id="aiTriageResult" style="background: var(--bg-surface); padding: 1rem; border-radius: 8px; margin-bottom: 2rem; border: 1px solid var(--border); display: none; text-align: left;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <span id="aiTriageBadge" class="coord-badge" style="border:none;">Level</span>
+          <span style="font-size:0.85rem; color:var(--text-dim);">AI Triage Complete</span>
+        </div>
+        <p id="aiTriageReasoning" style="font-size:0.9rem; color:var(--text-main); margin:0; line-height:1.4;"></p>
+      </div>
       
       <div style="display: flex; flex-direction: column; gap: 1rem;">
         <button id="btnSubmitAnother" class="btn-primary" style="padding: 1rem; font-size: 1rem;">Submit another report</button>

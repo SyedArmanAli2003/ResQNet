@@ -141,7 +141,7 @@ function startListening() {
       }
     });
 
-    const deployedCount = Math.floor(activeCount * 0.5);
+    const deployedCount = activeCount * 2;
     updateStats(activeCount, deployedCount, resolvedTodayCount);
     renderList(incidents);
 
@@ -156,8 +156,9 @@ function getTriageDetails(inc) {
   if (inc.triageComplete === false || inc.triageLevel == null) {
     return {
       color: '#2a2d3a', // default border
-      label: 'Analyzing...',
-      rank: 99
+      label: '<span class="coord-spinner"></span> Analyzing...',
+      rank: 99,
+      isPending: true
     };
   }
 
@@ -166,8 +167,8 @@ function getTriageDetails(inc) {
     case 2: return { color: '#854F0B', label: 'Level 2 — Severe',     rank: 2 };
     case 3: return { color: '#EF9F27', label: 'Level 3 — Moderate',   rank: 3 };
     case 4: return { color: '#3B6D11', label: 'Level 4 — Minor',      rank: 4 };
-    case 5: return { color: '#555555', label: 'Level 5 — Monitoring', rank: 5 };
-    default: return { color: '#2a2d3a', label: 'Pending', rank: 99 };
+    case 5: return { color: '#000000', label: 'Level 5 — Monitoring', rank: 5 };
+    default: return { color: '#2a2d3a', label: 'Pending', rank: 99, isPending: true };
   }
 }
 
@@ -182,14 +183,16 @@ function getAiReasoning(inc) {
 function renderList(incidents) {
   incidentsList.innerHTML = '';
 
-  if (incidents.length === 0) {
+  const activeIncidents = incidents.filter(i => i.status !== 'resolved');
+
+  if (activeIncidents.length === 0) {
     emptyState.style.display = 'block';
     incidentsList.appendChild(emptyState);
     return;
   }
   emptyState.style.display = 'none';
 
-  const sorted = incidents.slice().sort((a, b) => {
+  const sorted = activeIncidents.slice().sort((a, b) => {
     const rankDiff = getTriageDetails(a).rank - getTriageDetails(b).rank;
     if (rankDiff !== 0) return rankDiff;
     return (b.timestamp?.toDate?.()?.getTime?.() || 0) - (a.timestamp?.toDate?.()?.getTime?.() || 0);
@@ -214,11 +217,14 @@ function renderList(incidents) {
 
     // Badge styling matches triage color with some opacity, unless it's analyzing
     const badgeBg = triage.color === '#2a2d3a' ? '#1c2533' : triage.color + '33';
-    const badgeColor = triage.color === '#2a2d3a' ? '#8e96a3' : triage.color;
+    // For black, adjust badge color so it's visible on dark mode
+    let badgeColor = triage.color;
+    if (triage.color === '#2a2d3a') badgeColor = '#8e96a3';
+    if (triage.color === '#000000') badgeColor = '#999999';
 
     card.innerHTML = `
       <div class="coord-card-row-top">
-        <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color}44;">${triage.label}</span>
+        <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color === '#000000' ? '#333' : triage.color+'44'}; display:flex; align-items:center; gap:6px;">${triage.label}</span>
         <span class="coord-time-ago">${timeLabel}</span>
       </div>
       <div class="coord-card-body">
@@ -472,7 +478,7 @@ function listenToHistory() {
       
       card.innerHTML = `
         <div>
-          <div style="font-weight:600; margin-bottom:0.4rem;">${data.type || 'Emergency'} <span class="coord-badge" style="background:${badgeBg}; color:${badgeColor}; border:none; margin-left:0.5rem;">${triage.label}</span></div>
+          <div style="font-weight:600; margin-bottom:0.4rem;">${data.type || 'Emergency'} <span class="coord-badge" style="background:${badgeBg}; color:${badgeColor}; border:none; margin-left:0.5rem; display:inline-flex; align-items:center; gap:4px;">${triage.label}</span></div>
           <div style="font-size:0.85rem; color:var(--text-dim);">📍 ${data.location || 'Unknown'} • <span style="color:var(--text-muted);">${timeStr}</span></div>
         </div>
         <span class="coord-badge" style="border-color:${status === 'resolved' ? 'var(--accent-green)' : 'var(--accent-red)'}; color:${status === 'resolved' ? 'var(--accent-green)' : 'var(--accent-red)'};">${status === 'resolved' ? 'Resolved' : 'Pending'}</span>

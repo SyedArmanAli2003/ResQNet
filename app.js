@@ -79,52 +79,49 @@ async function reverseGeocode(lat, lng) {
 // --- GEMINI TRIAGE ---
 async function runGeminiTriage(incident) {
   console.log("[ResQNet] Starting Gemini triage...");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`;
   
-  const prompt = `You are an emergency triage AI.
-Analyze this crisis report and return ONLY valid JSON.
-No explanation. No markdown. No backticks.
+  const prompt = `You are an emergency triage AI. Analyze this crisis report and return ONLY a valid JSON object with no explanation, no markdown backticks.
 
+Incident:
 Type: ${incident.type}
-Description: ${incident.description || 'No description'}
-Voice: ${incident.voiceTranscript || 'No voice'}
+Description: ${incident.description || 'No description'}  
 Location: ${incident.location}
-Time: ${new Date(incident.timestamp?.toDate()).toISOString()}
 
-Return exactly this JSON shape:
+Return exactly:
 {
   "level": 1,
   "levelName": "Critical",
   "color": "red",
-  "reasoning": "one sentence explaining why",
-  "volunteerTypes": ["type1", "type2"],
+  "reasoning": "one sentence max",
+  "volunteerTypes": ["type1", "type2", "type3"],
   "estimatedMinutes": 10
 }
 
-Level guide:
-1 = Critical (red) — life threatening, immediate
-2 = Severe (orange) — urgent, within 1 hour  
-3 = Moderate (yellow) — serious but stable
-4 = Minor (green) — can wait several hours
-5 = Monitoring (gray) — informational only`;
+Level guide: 1=Critical(red), 2=Severe(orange), 3=Moderate(yellow), 4=Minor(green), 5=Monitoring(black)`;
 
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  
-  const data = await res.json();
-  const text = data.candidates[0].content.parts[0].text;
-  const clean = text.replace(/```json|```/g, '').trim();
-  const result = JSON.parse(clean);
-  console.log(`[ResQNet] Gemini response received: level ${result.level}`);
-  return result;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    const data = await res.json();
+    const text = data.candidates[0].content.parts[0].text;
+    const clean = text.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+    console.log(`[ResQNet] Gemini response received: level ${result.level}`);
+    return result;
+  } catch (error) {
+    console.error("[ResQNet] Failed to parse Gemini response:", error);
+    throw error;
+  }
 }
 
 // --- VOICE CAPTURE (Issue 2: tap-to-record, user-initiated) ---
@@ -392,7 +389,51 @@ submitBtn.addEventListener('click', async () => {
 
     // Success — show modal
     categoryModal.style.display = 'none';
-    if (successModal) successModal.style.display = 'flex';
+    if (successModal) {
+      successModal.style.display = 'flex';
+      
+      const triageResultEl = document.getElementById('aiTriageResult');
+      const badgeEl = document.getElementById('aiTriageBadge');
+      const reasonEl = document.getElementById('aiTriageReasoning');
+      
+      if (triageResultEl) {
+        triageResultEl.style.display = 'none'; // hide until complete
+        
+        const unsub = onSnapshot(docRef, (docSnap) => {
+          const data = docSnap.data();
+          if (data && data.triageComplete) {
+            triageResultEl.style.display = 'block';
+            let colorHex = '#2a2d3a';
+            let bgHex = '#1c2533';
+            let fontColor = '#8e96a3';
+            
+            switch (data.triageLevel) {
+              case 1: colorHex = '#A32D2D'; break;
+              case 2: colorHex = '#854F0B'; break;
+              case 3: colorHex = '#EF9F27'; break;
+              case 4: colorHex = '#3B6D11'; break;
+              case 5: colorHex = '#000000'; break;
+            }
+            
+            if (data.triageLevel >= 1 && data.triageLevel <= 4) {
+              bgHex = colorHex + '33';
+              fontColor = colorHex;
+            } else if (data.triageLevel === 5) {
+              bgHex = '#00000033';
+              fontColor = '#999999';
+            }
+            
+            badgeEl.textContent = data.triageLevelName || \`Level \${data.triageLevel}\`;
+            badgeEl.style.background = bgHex;
+            badgeEl.style.color = fontColor;
+            
+            reasonEl.textContent = data.triageReasoning || 'AI triage complete.';
+            
+            unsub(); // stop listening once we got the result
+          }
+        });
+      }
+    }
 
   } catch (e) {
     console.error('[Submit] Firestore write failed:', e);
