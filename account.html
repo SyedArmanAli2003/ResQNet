@@ -65,9 +65,23 @@
     .danger-zone { border: 1px solid rgba(192,57,43,0.3); border-radius: var(--radius); padding: 1.5rem; }
     .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 0.8rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-danger:hover { background: rgba(192,57,43,0.1); }
+
+    /* Force dark inputs */
+    input, select, textarea {
+      background: #0f1117 !important;
+      border: 1px solid #2a2d3a !important;
+      color: #f0f0f0 !important;
+      border-radius: 6px;
+      padding: 8px 12px;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #A32D2D !important;
+      outline: none;
+    }
   </style>
 </head>
-<body>
+<body style="background:#0f1117;color:#f0f0f0;min-height:100vh;font-family:system-ui,sans-serif">
   <header style="padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
     <a href="index.html" style="text-decoration: none;">
       <h1 style="margin:0; font-size: 1.5rem; font-weight: 900; letter-spacing:-1px; color:var(--text);">Res<span style="color:var(--red)">Q</span>Net</h1>

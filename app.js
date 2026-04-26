@@ -61,34 +61,52 @@ function formatCoords(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
-// Initialize
+// Initialize — populate sidebar and guard route
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = 'auth.html'
     return
   }
-  
-  // Get full profile from Firestore
-  const userDoc = await getDoc(
-    doc(db, 'users', user.uid))
-  const profile = userDoc.exists() ? 
-    userDoc.data() : null
 
-  const name = profile?.fullName || 
-    user.displayName || 'User'
-  const email = user.email || ''
-  const initials = name.split(' ')
-    .map(n => n[0]).join('').toUpperCase()
-    .slice(0, 2)
+  try {
+    // Try to get profile from Firestore
+    const userDocSnap = await getDoc(doc(db, 'users', user.uid))
 
-  document.getElementById('userName').textContent = name
-  document.getElementById('userEmail').textContent = email
-  document.getElementById('userAvatar').textContent = 
-    initials
+    let name, email, initials
 
-  // Store for use in incident submission
-  sessionStorage.setItem('userProfile', 
-    JSON.stringify({ ...profile, uid: user.uid, email }))
+    if (userDocSnap.exists()) {
+      const profile = userDocSnap.data()
+      name = profile.fullName || user.displayName || 'User'
+      email = user.email || ''
+      sessionStorage.setItem('userProfile',
+        JSON.stringify({ ...profile, uid: user.uid }))
+    } else {
+      // Profile doesn't exist yet — use Auth data
+      name = user.displayName || user.email?.split('@')[0] || 'User'
+      email = user.email || ''
+    }
+
+    initials = name.split(' ')
+      .map(n => n[0]).join('')
+      .toUpperCase().slice(0, 2)
+
+    const avatarEl = document.getElementById('userAvatar')
+    const nameEl   = document.getElementById('userName')
+    const emailEl  = document.getElementById('userEmail')
+
+    if (avatarEl) avatarEl.textContent = initials
+    if (nameEl)   nameEl.textContent   = name
+    if (emailEl)  emailEl.textContent  = email
+
+  } catch (err) {
+    console.error('[Auth] Profile load error:', err)
+    const nameEl   = document.getElementById('userName')
+    const emailEl  = document.getElementById('userEmail')
+    const avatarEl = document.getElementById('userAvatar')
+    if (nameEl)   nameEl.textContent   = user.displayName || 'User'
+    if (emailEl)  emailEl.textContent  = user.email || ''
+    if (avatarEl) avatarEl.textContent = (user.displayName || 'U')[0].toUpperCase()
+  }
 
   listenToIncidents();
 });
@@ -326,35 +344,40 @@ function setupMicButton() {
 setupMicButton();
 
 // --- SOS HOLD LOGIC ---
-sosBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  isHolding = true;
+let holdTimer2 = null
+let holdStarted = false
+
+function startHold() {
+  holdStarted = true
+  sosBtn.style.transform = 'scale(0.95)'
+  sosBtn.style.opacity = '0.8'
   sosProgress.style.strokeDashoffset = '0';
   sosProgress.style.transition = 'stroke-dashoffset 2s linear';
-  
-  holdTimer = setTimeout(async () => {
-    if (isHolding) {
-      triggerSOS();
-    }
-  }, 2000);
-});
 
-const endHold = () => {
-  isHolding = false;
-  clearTimeout(holdTimer);
+  holdTimer2 = setTimeout(() => {
+    if (holdStarted) {
+      console.log('[SOS] Hold complete — getting GPS')
+      sosBtn.style.transform = 'scale(1)'
+      sosBtn.style.opacity = '1'
+      triggerSOS()
+    }
+  }, 2000)
+}
+
+function cancelHold() {
+  holdStarted = false
+  clearTimeout(holdTimer2)
+  sosBtn.style.transform = 'scale(1)'
+  sosBtn.style.opacity = '1'
   sosProgress.style.transition = 'none';
   sosProgress.style.strokeDashoffset = '339';
-};
-
-window.addEventListener('pointerup', endHold);
-window.addEventListener('pointercancel', endHold);
+}
 
 async function triggerSOS() {
-  categoryModal.style.display = 'flex';  // show modal
+  categoryModal.style.display = 'flex';
   gpsStatus.textContent = '\uD83D\uDCCD Capturing GPS...';
   currentCoords = null;
   currentAddress = null;
-  // Reset voice UI for each new SOS session
   voiceTranscript = '';
   updateVoiceUI('');
   micBtn.classList.remove('recording');
@@ -367,7 +390,6 @@ async function triggerSOS() {
     gpsStatus.textContent = `\uD83D\uDCCD ${rawCoords}`;
     currentAddress = rawCoords;
 
-    // Reverse-geocode with built-in 5-second timeout
     const resolved = await reverseGeocode(currentCoords.lat, currentCoords.lng);
     currentAddress = resolved;
     gpsStatus.textContent = `\uD83D\uDCCD ${resolved}`;
@@ -377,6 +399,17 @@ async function triggerSOS() {
     gpsStatus.textContent = '\uD83D\uDCCD GPS permission denied.';
   }
 }
+
+// Attach events — both mouse and touch
+sosBtn.addEventListener('mousedown', startHold)
+sosBtn.addEventListener('touchstart', (e) => {
+  e.preventDefault()
+  startHold()
+})
+sosBtn.addEventListener('mouseup', cancelHold)
+sosBtn.addEventListener('mouseleave', cancelHold)
+sosBtn.addEventListener('touchend', cancelHold)
+sosBtn.addEventListener('touchcancel', cancelHold)
 
 // --- MODAL LOGIC ---
 catBtns.forEach(btn => {
