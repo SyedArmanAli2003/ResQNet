@@ -138,7 +138,7 @@
       <div id="voiceArea" class="voice-area">
         <button id="micBtn" class="mic-btn" type="button" title="Tap to record">
           <span class="mic-icon">🎙</span>
-          <span class="mic-label">Tap to record (5 sec)</span>
+          <span class="mic-label">Tap to record (15 sec)</span>
         </button>
         <p id="voiceStatus" class="voice-status-text"></p>
       </div>
@@ -253,6 +253,7 @@
     let activeStream = null;
     let holdTimer = null;
     let holdActive = false;
+    const VOICE_RECORD_SECONDS = 15;
 
     function formatCoords(lat, lng) {
       return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
@@ -281,7 +282,7 @@
       voiceTranscript = '';
       updateVoiceUI('');
       const micLabel = micBtn?.querySelector('.mic-label');
-      if (micLabel) micLabel.textContent = 'Tap to record (5 sec)';
+      if (micLabel) micLabel.textContent = `Tap to record (${VOICE_RECORD_SECONDS} sec)`;
     }
 
     function setupMicButton() {
@@ -321,7 +322,7 @@
           recognition.maxAlternatives = 1;
 
           micBtn.classList.add('recording');
-          let count = 5;
+          let count = VOICE_RECORD_SECONDS;
           updateVoiceUI(`Listening... ${count}`);
 
           const countdown = setInterval(() => {
@@ -360,7 +361,7 @@
             try {
               recognition.stop();
             } catch {}
-          }, 5000);
+          }, VOICE_RECORD_SECONDS * 1000);
         } catch (err) {
           updateVoiceUI(`Mic blocked: ${err.message || 'Permission denied'}`);
           stopActiveVoiceCapture();
