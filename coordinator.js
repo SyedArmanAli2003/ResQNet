@@ -236,7 +236,7 @@ function renderList(incidents) {
       </div>
       <div class="coord-card-body">
         <h3 class="coord-card-title">${inc.type || 'Unknown Crisis'}</h3>
-        <p class="coord-card-location">📍 ${locationLabel}</p>
+        <p class="coord-card-location">📍 ${locationLabel} &nbsp;&nbsp; 👤 ${inc.reporterName || 'Anonymous'}</p>
         <p class="coord-card-ai">${aiReasoning}</p>
         ${inc.description ? `<p class="coord-card-desc">"${inc.description}"</p>` : ''}
       </div>
@@ -489,7 +489,7 @@ function listenToHistory() {
       card.innerHTML = `
         <div>
           <div style="font-weight:600; margin-bottom:0.4rem;">${data.type || 'Emergency'} <span class="coord-badge" style="background:${badgeBg}; color:${badgeColor}; border:none; margin-left:0.5rem; display:inline-flex; align-items:center; gap:4px;">${triage.label}</span></div>
-          <div style="font-size:0.85rem; color:var(--text-dim);">📍 ${data.location || 'Unknown'} • <span style="color:var(--text-muted);">${timeStr}</span></div>
+          <div style="font-size:0.85rem; color:var(--text-dim);">📍 ${data.location || 'Unknown'} • 👤 ${data.reporterName || 'Anonymous'} • <span style="color:var(--text-muted);">${timeStr}</span></div>
         </div>
         <span class="coord-badge" style="border-color:${status === 'resolved' ? 'var(--accent-green)' : 'var(--accent-red)'}; color:${status === 'resolved' ? 'var(--accent-green)' : 'var(--accent-red)'};">${status === 'resolved' ? 'Resolved' : 'Pending'}</span>
       `;

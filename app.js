@@ -1,7 +1,8 @@
 // NOTE: Must be served via localhost or HTTPS for mic to work
 // Run with: npx serve .
 // Then open http://localhost:3000
-import { db, ensureAuth } from './firebaseConfig.js';
+import { db, auth, signOut } from './firebaseConfig.js';
+import { getCurrentUser } from './auth.js';
 import { 
   collection, 
   addDoc, 
@@ -61,7 +62,26 @@ function formatCoords(lat, lng) {
 
 // Initialize
 async function init() {
-  await ensureAuth();
+  const user = getCurrentUser();
+  if (user) {
+    const pContainer = document.getElementById('reporterProfile');
+    if (pContainer) {
+      pContainer.style.display = 'flex';
+      document.getElementById('rpName').textContent = user.fullName || 'User';
+      document.getElementById('rpEmail').textContent = user.email || '';
+      document.getElementById('rpAvatar').textContent = (user.fullName || 'U').substring(0, 2).toUpperCase();
+    }
+  }
+
+  const btnSignOut = document.getElementById('btnSignOut');
+  if (btnSignOut) {
+    btnSignOut.addEventListener('click', async () => {
+      await signOut(auth);
+      sessionStorage.removeItem('userProfile');
+      window.location.href = 'auth.html';
+    });
+  }
+
   listenToIncidents();
 }
 init();
@@ -411,6 +431,8 @@ submitBtn.addEventListener('click', async () => {
         ? formatCoords(currentCoords.lat, currentCoords.lng)
         : 'Unknown location';
 
+    const userProfile = getCurrentUser();
+
     const docRef = await addDoc(collection(db, 'incidents'), {
       type: selectedCategory,
       description: incidentDesc.value,
@@ -419,7 +441,10 @@ submitBtn.addEventListener('click', async () => {
       voiceTranscript: voiceTranscript,
       timestamp: serverTimestamp(),
       status: 'pending',
-      triageLevel: null
+      triageLevel: null,
+      reportedBy: userProfile ? userProfile.uid : 'unknown',
+      reporterName: userProfile ? userProfile.fullName : 'Anonymous user',
+      reporterPhone: userProfile ? userProfile.phone : ''
     });
 
     // Store in session history

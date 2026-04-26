@@ -37,9 +37,15 @@
       </nav>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="coord-badge" style="background:transparent;border:none;padding-left:0;color:var(--text-dim)">Anonymous user</div>
-      <a href="index.html" class="btn-coord-view" style="text-align:center;text-decoration:none">← Exit to home</a>
+    <div style="display:flex;flex-direction:column;gap:8px; overflow: hidden;">
+      <div id="reporterProfile" style="display:flex; align-items:center; gap: 10px; margin-bottom: 0.5rem; display:none;">
+        <div id="rpAvatar" style="width:36px; height:36px; min-width:36px; border-radius:50%; background:var(--red); display:flex; align-items:center; justify-content:center; font-weight:700; color:white; font-size:1rem;"></div>
+        <div style="display:flex; flex-direction:column;">
+          <span id="rpName" style="color:var(--text); font-weight:600; font-size:0.9rem;"></span>
+          <span id="rpEmail" style="color:var(--muted); font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 130px;"></span>
+        </div>
+      </div>
+      <button id="btnSignOut" class="btn-coord-view" style="text-align:center;text-decoration:none; cursor:pointer; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: var(--text-dim); transition: 0.2s;">Sign out</button>
     </div>
   </aside>
 
