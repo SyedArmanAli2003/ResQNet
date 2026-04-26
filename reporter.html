@@ -189,7 +189,384 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="firebaseConfig.js" type="module"></script>
-  <script type="module" src="app.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      onSnapshot,
+      query,
+      orderBy,
+      serverTimestamp,
+      doc,
+      getDoc,
+      updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAgSylHSHd1KRN4SYNqG30cQkrGRfY2CCI",
+      authDomain: "resqnet-e74e0.firebaseapp.com",
+      projectId: "resqnet-e74e0",
+      storageBucket: "resqnet-e74e0.firebasestorage.app",
+      messagingSenderId: "206471236870",
+      appId: "1:206471236870:web:807c01c54ef0adb332a287",
+      measurementId: "G-79KC3T537B"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const sosBtn = document.getElementById('sosBtn');
+    const sosProgress = document.getElementById('sosProgressCircle');
+    const categoryModal = document.getElementById('categoryModal');
+    const gpsStatus = document.getElementById('gpsStatus');
+    const catBtns = document.querySelectorAll('.cat-btn');
+    const incidentDesc = document.getElementById('incidentDesc');
+    const submitBtn = document.getElementById('submitIncident');
+    const cancelBtn = document.getElementById('cancelModal');
+    const successModal = document.getElementById('successModal');
+    const btnSubmitAnother = document.getElementById('btnSubmitAnother');
+    const incidentsList = document.getElementById('incidentsList');
+    const activeCountEl = document.getElementById('activeCount');
+    const resolvedCountEl = document.getElementById('resolvedCount');
+    const statActiveEl = document.getElementById('statActive');
+    const statResolvedEl = document.getElementById('statResolved');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const avatarEl = document.getElementById('userAvatar');
+    const nameEl = document.getElementById('userName');
+    const emailEl = document.getElementById('userEmail');
+
+    let currentCoords = null;
+    let currentAddress = null;
+    let selectedCategory = null;
+    let holdTimer = null;
+    let holdActive = false;
+
+    function formatCoords(lat, lng) {
+      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    }
+
+    function setSidebarProfile(name, email, uid, extras = {}) {
+      const finalName = name || 'User';
+      const finalEmail = email || '';
+      const initials = finalName
+        .trim()
+        .split(' ')
+        .filter(Boolean)
+        .map((part) => part[0].toUpperCase())
+        .join('')
+        .slice(0, 2) || 'U';
+
+      if (avatarEl) avatarEl.textContent = initials;
+      if (nameEl) nameEl.textContent = finalName;
+      if (emailEl) emailEl.textContent = finalEmail;
+
+      sessionStorage.setItem(
+        'userProfile',
+        JSON.stringify({
+          uid,
+          fullName: finalName,
+          email: finalEmail,
+          ...extras
+        })
+      );
+    }
+
+    async function loadUserProfile(user) {
+      const fallbackName = user.displayName || user.email?.split('@')[0] || 'User';
+      const fallbackEmail = user.email || '';
+
+      setSidebarProfile(fallbackName, fallbackEmail, user.uid);
+
+      try {
+        const userDocSnap = await getDoc(doc(db, 'users', user.uid));
+        if (userDocSnap.exists()) {
+          const profile = userDocSnap.data();
+          const fullName = profile.fullName || fallbackName;
+          const email = user.email || profile.email || fallbackEmail;
+          setSidebarProfile(fullName, email, user.uid, profile);
+        }
+      } catch (err) {
+        console.warn('[Auth] profile lookup failed, using auth fallback:', err);
+      }
+    }
+
+    async function reverseGeocode(lat, lng) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`;
+        const response = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await response.json();
+        return data.display_name || formatCoords(lat, lng);
+      } catch {
+        return formatCoords(lat, lng);
+      }
+    }
+
+    function getPosition() {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000
+        });
+      });
+    }
+
+    function resetHoldState() {
+      holdActive = false;
+      clearTimeout(holdTimer);
+      holdTimer = null;
+      if (sosBtn) {
+        sosBtn.style.transform = 'scale(1)';
+        sosBtn.style.boxShadow = '0 0 30px rgba(163, 45, 45, 0.3)';
+      }
+      if (sosProgress) {
+        sosProgress.style.transition = 'none';
+        sosProgress.style.strokeDashoffset = '339';
+      }
+    }
+
+    async function triggerSOS() {
+      if (!categoryModal) return;
+
+      categoryModal.style.display = 'flex';
+      gpsStatus.textContent = '📍 Capturing GPS...';
+      currentCoords = null;
+      currentAddress = null;
+
+      try {
+        const position = await getPosition();
+        currentCoords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        gpsStatus.textContent = `📍 ${formatCoords(currentCoords.lat, currentCoords.lng)}`;
+
+        const resolved = await reverseGeocode(currentCoords.lat, currentCoords.lng);
+        currentAddress = resolved;
+        gpsStatus.textContent = `📍 ${resolved}`;
+      } catch {
+        currentAddress = 'Location unavailable';
+        gpsStatus.textContent = '📍 GPS permission denied.';
+      }
+    }
+
+    function startHold(event) {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      event.preventDefault();
+
+      if (holdActive) return;
+      holdActive = true;
+
+      if (sosBtn.setPointerCapture) {
+        try {
+          sosBtn.setPointerCapture(event.pointerId);
+        } catch {}
+      }
+
+      if (sosBtn) {
+        sosBtn.style.transform = 'scale(0.95)';
+        sosBtn.style.boxShadow = '0 0 0 8px rgba(163,45,45,0.3)';
+      }
+      if (sosProgress) {
+        sosProgress.style.strokeDashoffset = '0';
+        sosProgress.style.transition = 'stroke-dashoffset 2s linear';
+      }
+
+      holdTimer = setTimeout(() => {
+        if (holdActive) {
+          resetHoldState();
+          triggerSOS();
+        }
+      }, 2000);
+    }
+
+    function cancelHold() {
+      resetHoldState();
+    }
+
+    if (sosBtn) {
+      sosBtn.addEventListener('pointerdown', startHold);
+      sosBtn.addEventListener('pointerup', cancelHold);
+      sosBtn.addEventListener('pointerleave', cancelHold);
+      sosBtn.addEventListener('pointercancel', cancelHold);
+      sosBtn.addEventListener('lostpointercapture', cancelHold);
+    }
+
+    function renderIncidentCard(incident) {
+      const severity = {
+        Medical: { color: '#E53935', label: 'Level 1 — Critical' },
+        Disaster: { color: '#F57C00', label: 'Level 2 — Severe' },
+        Conflict: { color: '#FBC02D', label: 'Level 3 — Moderate' },
+        Resource: { color: '#4CAF50', label: 'Level 4 — Minor' },
+        Hospitality: { color: '#757575', label: 'Level 5 — Monitoring' }
+      }[incident.type] || { color: '#4CAF50', label: 'Level 4 — Minor' };
+
+      const card = document.createElement('div');
+      card.className = 'incident-card';
+      card.style.borderLeftColor = severity.color;
+
+      const timeLabel = incident.timestamp?.toDate
+        ? incident.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : 'Just now';
+
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="card-level" style="color: ${severity.color}">${severity.label}</span>
+          <span>${timeLabel}</span>
+        </div>
+        <h3 class="card-title">${incident.type} emergency</h3>
+        <p class="card-loc">${incident.location || 'Location unavailable'}</p>
+        ${incident.description ? `<p class="card-desc">"${incident.description}"</p>` : ''}
+        <div class="card-tags">
+          <span class="tag">Responder requested</span>
+          <span class="tag">First aid</span>
+        </div>
+        <button class="btn-resolve" data-id="${incident.id}">Mark resolved</button>
+      `;
+
+      const resolveBtn = card.querySelector('.btn-resolve');
+      if (resolveBtn) {
+        resolveBtn.addEventListener('click', async (event) => {
+          const id = event.currentTarget?.dataset?.id;
+          if (!id) return;
+          await updateDoc(doc(db, 'incidents', id), { status: 'resolved' });
+        });
+      }
+
+      incidentsList?.appendChild(card);
+    }
+
+    function listenToIncidents() {
+      const incidentsQuery = query(collection(db, 'incidents'), orderBy('timestamp', 'desc'));
+
+      onSnapshot(incidentsQuery, (snapshot) => {
+        if (incidentsList) incidentsList.innerHTML = '';
+
+        let active = 0;
+        let resolved = 0;
+
+        snapshot.forEach((docSnap) => {
+          const incident = { id: docSnap.id, ...docSnap.data() };
+          if (incident.status === 'resolved') {
+            resolved += 1;
+          } else {
+            active += 1;
+            renderIncidentCard(incident);
+          }
+        });
+
+        if (activeCountEl) activeCountEl.textContent = String(active);
+        if (resolvedCountEl) resolvedCountEl.textContent = String(resolved);
+        if (statActiveEl) statActiveEl.textContent = String(active);
+        if (statResolvedEl) statResolvedEl.textContent = String(resolved);
+      });
+    }
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.location.href = 'auth.html';
+        return;
+      }
+
+      await loadUserProfile(user);
+      listenToIncidents();
+    });
+
+    if (signOutBtn) {
+      signOutBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        signOutBtn.disabled = true;
+
+        try {
+          await signOut(auth);
+        } catch (err) {
+          console.warn('[Auth] sign out failed, redirecting anyway:', err);
+        } finally {
+          sessionStorage.clear();
+          window.location.href = 'auth.html';
+        }
+      });
+    }
+
+    if (catBtns.length) {
+      catBtns.forEach((button) => {
+        button.addEventListener('click', () => {
+          catBtns.forEach((btn) => btn.classList.remove('active'));
+          button.classList.add('active');
+          selectedCategory = button.dataset.type || null;
+        });
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        if (categoryModal) categoryModal.style.display = 'none';
+        selectedCategory = null;
+        currentCoords = null;
+        currentAddress = null;
+        incidentDesc.value = '';
+        catBtns.forEach((button) => button.classList.remove('active'));
+        resetHoldState();
+      });
+    }
+
+    if (submitBtn) {
+      submitBtn.addEventListener('click', async () => {
+        if (!selectedCategory) {
+          alert('Please select a category');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending...';
+
+        try {
+          const userProfile = JSON.parse(sessionStorage.getItem('userProfile') || 'null');
+          const safeLocation = currentAddress || (currentCoords ? formatCoords(currentCoords.lat, currentCoords.lng) : 'Unknown location');
+
+          await addDoc(collection(db, 'incidents'), {
+            type: selectedCategory,
+            description: incidentDesc.value,
+            location: safeLocation,
+            coordinates: currentCoords,
+            timestamp: serverTimestamp(),
+            status: 'pending',
+            triageLevel: null,
+            reportedBy: userProfile?.uid || auth.currentUser?.uid || 'unknown',
+            reporterName: userProfile?.fullName || auth.currentUser?.displayName || 'Anonymous user',
+            reporterPhone: userProfile?.phone || ''
+          });
+
+          if (categoryModal) categoryModal.style.display = 'none';
+          if (successModal) successModal.style.display = 'flex';
+        } catch (err) {
+          console.error('[Submit] failed:', err);
+          alert('Failed to send report. Please try again.');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Send SOS Report';
+        }
+      });
+    }
+
+    if (btnSubmitAnother) {
+      btnSubmitAnother.addEventListener('click', () => {
+        if (successModal) successModal.style.display = 'none';
+        selectedCategory = null;
+        currentCoords = null;
+        currentAddress = null;
+        incidentDesc.value = '';
+        catBtns.forEach((button) => button.classList.remove('active'));
+        resetHoldState();
+      });
+    }
+  </script>
 </body>
 </html>

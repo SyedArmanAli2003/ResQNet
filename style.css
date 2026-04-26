@@ -863,6 +863,12 @@ body.coord-page {
   font-weight: 500;
   flex-shrink: 0;
 }
+.user-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
 .user-name {
   font-size: 12px;
   font-weight: 500;
@@ -870,6 +876,7 @@ body.coord-page {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 .user-email {
   font-size: 10px;
@@ -877,7 +884,7 @@ body.coord-page {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 130px;
+  max-width: 100%;
 }
 .account-settings-link {
   font-size: 11px;
