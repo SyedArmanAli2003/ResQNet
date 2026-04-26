@@ -227,6 +227,8 @@
     const sosProgress = document.getElementById('sosProgressCircle');
     const categoryModal = document.getElementById('categoryModal');
     const gpsStatus = document.getElementById('gpsStatus');
+    const micBtn = document.getElementById('micBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
     const catBtns = document.querySelectorAll('.cat-btn');
     const incidentDesc = document.getElementById('incidentDesc');
     const submitBtn = document.getElementById('submitIncident');
@@ -246,11 +248,124 @@
     let currentCoords = null;
     let currentAddress = null;
     let selectedCategory = null;
+    let voiceTranscript = '';
+    let activeRecognition = null;
+    let activeStream = null;
     let holdTimer = null;
     let holdActive = false;
 
     function formatCoords(lat, lng) {
       return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    }
+
+    function updateVoiceUI(message) {
+      if (voiceStatus) voiceStatus.textContent = message;
+    }
+
+    function stopActiveVoiceCapture() {
+      if (activeRecognition) {
+        try {
+          activeRecognition.abort();
+        } catch {}
+        activeRecognition = null;
+      }
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+        activeStream = null;
+      }
+      if (micBtn) micBtn.classList.remove('recording');
+    }
+
+    function resetVoiceState() {
+      stopActiveVoiceCapture();
+      voiceTranscript = '';
+      updateVoiceUI('');
+      const micLabel = micBtn?.querySelector('.mic-label');
+      if (micLabel) micLabel.textContent = 'Tap to record (5 sec)';
+    }
+
+    function setupMicButton() {
+      if (!micBtn) return;
+
+      micBtn.addEventListener('click', async () => {
+        if (micBtn.classList.contains('recording')) return;
+
+        if (window.location.protocol === 'file:') {
+          updateVoiceUI('Open with localhost/HTTPS for mic support.');
+          return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          updateVoiceUI('Microphone API not supported in this browser.');
+          return;
+        }
+
+        voiceTranscript = '';
+        updateVoiceUI('Requesting mic permission...');
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          activeStream = stream;
+
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SpeechRecognition) {
+            updateVoiceUI('Speech-to-text not supported here. Voice capture unavailable.');
+            stopActiveVoiceCapture();
+            return;
+          }
+
+          const recognition = new SpeechRecognition();
+          activeRecognition = recognition;
+          recognition.lang = 'en-US';
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+
+          micBtn.classList.add('recording');
+          let count = 5;
+          updateVoiceUI(`Listening... ${count}`);
+
+          const countdown = setInterval(() => {
+            count -= 1;
+            if (count > 0) {
+              updateVoiceUI(`Listening... ${count}`);
+            } else {
+              clearInterval(countdown);
+            }
+          }, 1000);
+
+          recognition.onresult = (event) => {
+            const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+            if (transcript) {
+              voiceTranscript = transcript;
+              updateVoiceUI(`Captured: "${voiceTranscript}"`);
+            }
+          };
+
+          recognition.onerror = (event) => {
+            clearInterval(countdown);
+            updateVoiceUI(`Mic error: ${event.error}`);
+          };
+
+          recognition.onend = () => {
+            clearInterval(countdown);
+            stopActiveVoiceCapture();
+            if (!voiceTranscript) {
+              updateVoiceUI('Nothing captured — tap to try again.');
+            }
+          };
+
+          recognition.start();
+
+          setTimeout(() => {
+            try {
+              recognition.stop();
+            } catch {}
+          }, 5000);
+        } catch (err) {
+          updateVoiceUI(`Mic blocked: ${err.message || 'Permission denied'}`);
+          stopActiveVoiceCapture();
+        }
+      });
     }
 
     function setSidebarProfile(name, email, uid, extras = {}) {
@@ -339,6 +454,7 @@
       gpsStatus.textContent = '📍 Capturing GPS...';
       currentCoords = null;
       currentAddress = null;
+      resetVoiceState();
 
       try {
         const position = await getPosition();
@@ -356,6 +472,8 @@
         gpsStatus.textContent = '📍 GPS permission denied.';
       }
     }
+
+    setupMicButton();
 
     function startHold(event) {
       if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -513,6 +631,7 @@
         currentAddress = null;
         incidentDesc.value = '';
         catBtns.forEach((button) => button.classList.remove('active'));
+        resetVoiceState();
         resetHoldState();
       });
     }
@@ -536,6 +655,7 @@
             description: incidentDesc.value,
             location: safeLocation,
             coordinates: currentCoords,
+            voiceTranscript,
             timestamp: serverTimestamp(),
             status: 'pending',
             triageLevel: null,
@@ -564,6 +684,7 @@
         currentAddress = null;
         incidentDesc.value = '';
         catBtns.forEach((button) => button.classList.remove('active'));
+        resetVoiceState();
         resetHoldState();
       });
     }
