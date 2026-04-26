@@ -2,7 +2,6 @@
 // Run with: npx serve .
 // Then open http://localhost:3000
 import { db, auth, signOut, onAuthStateChanged } from './firebaseConfig.js';
-import { getCurrentUser } from './auth.js';
 import { 
   collection, 
   addDoc, 
@@ -31,94 +30,156 @@ const GEMINI_MODELS = [
   }
 ];
 
-// --- DOM ELEMENTS ---
-const sosBtn        = document.getElementById('sosBtn');
-const sosProgress   = document.getElementById('sosProgressCircle');
-const categoryModal = document.getElementById('categoryModal');
-const gpsStatus     = document.getElementById('gpsStatus');
-const micBtn        = document.getElementById('micBtn');
-const voiceStatus   = document.getElementById('voiceStatus');    // <p> status text
-const submitError   = document.getElementById('submitError');
-const catBtns       = document.querySelectorAll('.cat-btn');
-const incidentDesc  = document.getElementById('incidentDesc');
-const submitBtn     = document.getElementById('submitIncident');
-const cancelBtn     = document.getElementById('cancelModal');
-const successModal  = document.getElementById('successModal');
-const btnSubmitAnother = document.getElementById('btnSubmitAnother');
-const incidentsList = document.getElementById('incidentsList');
-const activeCountEl = document.getElementById('activeCount');
-const resolvedCountEl = document.getElementById('resolvedCount');
+// --- DOM ELEMENTS (lazily grabbed inside DOMContentLoaded) ---
+let sosBtn, sosProgress, categoryModal, gpsStatus, micBtn, voiceStatus,
+    submitError, catBtns, incidentDesc, submitBtn, cancelBtn,
+    successModal, btnSubmitAnother, incidentsList, activeCountEl, resolvedCountEl;
 
 // --- STATE ---
-let holdTimer = null;
-let isHolding = false;
 let currentCoords = null;
-let currentAddress = null;   // null until GPS resolves — never store placeholder strings
+let currentAddress = null;
 let selectedCategory = null;
-let voiceTranscript = "";
+let voiceTranscript = '';
 
 function formatCoords(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
-// Initialize — populate sidebar and guard route
+// ─── AUTH: fires immediately, separate from DOM setup ───────────────────────
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
-    window.location.href = 'auth.html'
-    return
+    console.log('[Auth] No user — redirecting to auth.html');
+    window.location.href = 'auth.html';
+    return;
   }
-
-  try {
-    // Try to get profile from Firestore
-    const userDocSnap = await getDoc(doc(db, 'users', user.uid))
-
-    let name, email, initials
-
-    if (userDocSnap.exists()) {
-      const profile = userDocSnap.data()
-      name = profile.fullName || user.displayName || 'User'
-      email = user.email || ''
-      sessionStorage.setItem('userProfile',
-        JSON.stringify({ ...profile, uid: user.uid }))
-    } else {
-      // Profile doesn't exist yet — use Auth data
-      name = user.displayName || user.email?.split('@')[0] || 'User'
-      email = user.email || ''
-    }
-
-    initials = name.split(' ')
-      .map(n => n[0]).join('')
-      .toUpperCase().slice(0, 2)
-
-    const avatarEl = document.getElementById('userAvatar')
-    const nameEl   = document.getElementById('userName')
-    const emailEl  = document.getElementById('userEmail')
-
-    if (avatarEl) avatarEl.textContent = initials
-    if (nameEl)   nameEl.textContent   = name
-    if (emailEl)  emailEl.textContent  = email
-
-  } catch (err) {
-    console.error('[Auth] Profile load error:', err)
-    const nameEl   = document.getElementById('userName')
-    const emailEl  = document.getElementById('userEmail')
-    const avatarEl = document.getElementById('userAvatar')
-    if (nameEl)   nameEl.textContent   = user.displayName || 'User'
-    if (emailEl)  emailEl.textContent  = user.email || ''
-    if (avatarEl) avatarEl.textContent = (user.displayName || 'U')[0].toUpperCase()
-  }
-
+  console.log('[Auth] User logged in:', user.email);
+  await loadUserProfile(user);
+  // Start listening after auth confirmed
   listenToIncidents();
 });
 
-const btnSignOut = document.getElementById('signOutBtn');
-if (btnSignOut) {
-  btnSignOut.addEventListener('click', async () => {
-    await signOut(auth);
-    sessionStorage.removeItem('userProfile');
-    window.location.href = 'auth.html';
-  });
+async function loadUserProfile(user) {
+  try {
+    const userDocSnap = await getDoc(doc(db, 'users', user.uid));
+    let name, email, initials;
+
+    if (userDocSnap.exists()) {
+      const profile = userDocSnap.data();
+      name  = profile.fullName || user.displayName || user.email?.split('@')[0] || 'User';
+      email = user.email || '';
+      sessionStorage.setItem('userProfile', JSON.stringify({ ...profile, uid: user.uid }));
+      console.log('[Auth] Profile loaded:', name);
+    } else {
+      console.warn('[Auth] No Firestore profile — using Auth data');
+      name  = user.displayName || user.email?.split('@')[0] || 'User';
+      email = user.email || '';
+    }
+
+    initials = name.trim().split(' ')
+      .filter(n => n.length > 0)
+      .map(n => n[0].toUpperCase())
+      .join('').slice(0, 2) || 'U';
+
+    const avatarEl = document.getElementById('userAvatar');
+    const nameEl   = document.getElementById('userName');
+    const emailEl  = document.getElementById('userEmail');
+    if (avatarEl) avatarEl.textContent = initials;
+    if (nameEl)   nameEl.textContent   = name;
+    if (emailEl)  emailEl.textContent  = email;
+  } catch (err) {
+    console.error('[Auth] loadUserProfile error:', err);
+    const fallback = user.displayName || user.email?.split('@')[0] || 'User';
+    const avatarEl = document.getElementById('userAvatar');
+    const nameEl   = document.getElementById('userName');
+    const emailEl  = document.getElementById('userEmail');
+    if (avatarEl) avatarEl.textContent = fallback[0].toUpperCase();
+    if (nameEl)   nameEl.textContent   = fallback;
+    if (emailEl)  emailEl.textContent  = user.email || '';
+  }
 }
+
+// ─── DOM SETUP: runs after DOM is ready ─────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Grab all DOM elements
+  sosBtn          = document.getElementById('sosBtn');
+  sosProgress     = document.getElementById('sosProgressCircle');
+  categoryModal   = document.getElementById('categoryModal');
+  gpsStatus       = document.getElementById('gpsStatus');
+  micBtn          = document.getElementById('micBtn');
+  voiceStatus     = document.getElementById('voiceStatus');
+  submitError     = document.getElementById('submitError');
+  catBtns         = document.querySelectorAll('.cat-btn');
+  incidentDesc    = document.getElementById('incidentDesc');
+  submitBtn       = document.getElementById('submitIncident');
+  cancelBtn       = document.getElementById('cancelModal');
+  successModal    = document.getElementById('successModal');
+  btnSubmitAnother = document.getElementById('btnSubmitAnother');
+  incidentsList   = document.getElementById('incidentsList');
+  activeCountEl   = document.getElementById('activeCount');
+  resolvedCountEl = document.getElementById('resolvedCount');
+
+  // ── SOS HOLD LOGIC ────────────────────────────────────────────────────────
+  if (sosBtn) {
+    let holdTimer = null;
+    let holdStarted = false;
+
+    function startHold() {
+      holdStarted = true;
+      sosBtn.style.transform = 'scale(0.95)';
+      sosBtn.style.boxShadow = '0 0 0 8px rgba(163,45,45,0.3)';
+      if (sosProgress) {
+        sosProgress.style.strokeDashoffset = '0';
+        sosProgress.style.transition = 'stroke-dashoffset 2s linear';
+      }
+      holdTimer = setTimeout(() => {
+        if (holdStarted) {
+          sosBtn.style.transform = 'scale(1)';
+          sosBtn.style.boxShadow = 'none';
+          if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
+          triggerSOS();
+        }
+      }, 2000);
+    }
+
+    function cancelHold() {
+      holdStarted = false;
+      clearTimeout(holdTimer);
+      sosBtn.style.transform = 'scale(1)';
+      sosBtn.style.boxShadow = 'none';
+      if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
+    }
+
+    sosBtn.addEventListener('mousedown', startHold);
+    sosBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, { passive: false });
+    sosBtn.addEventListener('mouseup', cancelHold);
+    sosBtn.addEventListener('mouseleave', cancelHold);
+    sosBtn.addEventListener('touchend', cancelHold);
+    sosBtn.addEventListener('touchcancel', cancelHold);
+    console.log('[SOS] Button events attached');
+  } else {
+    console.error('[SOS] sosBtn element not found!');
+  }
+
+  // ── SIGN OUT ──────────────────────────────────────────────────────────────
+  const signOutBtn = document.getElementById('signOutBtn');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', async () => {
+      try {
+        await signOut(auth);
+        sessionStorage.clear();
+        window.location.href = 'auth.html';
+      } catch (err) {
+        console.error('[Auth] Sign out error:', err);
+        alert('Sign out failed: ' + err.message);
+      }
+    });
+  }
+
+  // Wire up all other DOM-dependent code
+  setupMicButton();
+  setupModal();
+});
+
 
 // --- GPS & REVERSE GEOCODING ---
 async function getPosition() {
@@ -341,38 +402,6 @@ function setupMicButton() {
   });
 }
 
-setupMicButton();
-
-// --- SOS HOLD LOGIC ---
-let holdTimer2 = null
-let holdStarted = false
-
-function startHold() {
-  holdStarted = true
-  sosBtn.style.transform = 'scale(0.95)'
-  sosBtn.style.opacity = '0.8'
-  sosProgress.style.strokeDashoffset = '0';
-  sosProgress.style.transition = 'stroke-dashoffset 2s linear';
-
-  holdTimer2 = setTimeout(() => {
-    if (holdStarted) {
-      console.log('[SOS] Hold complete — getting GPS')
-      sosBtn.style.transform = 'scale(1)'
-      sosBtn.style.opacity = '1'
-      triggerSOS()
-    }
-  }, 2000)
-}
-
-function cancelHold() {
-  holdStarted = false
-  clearTimeout(holdTimer2)
-  sosBtn.style.transform = 'scale(1)'
-  sosBtn.style.opacity = '1'
-  sosProgress.style.transition = 'none';
-  sosProgress.style.strokeDashoffset = '339';
-}
-
 async function triggerSOS() {
   categoryModal.style.display = 'flex';
   gpsStatus.textContent = '\uD83D\uDCCD Capturing GPS...';
@@ -400,18 +429,8 @@ async function triggerSOS() {
   }
 }
 
-// Attach events — both mouse and touch
-sosBtn.addEventListener('mousedown', startHold)
-sosBtn.addEventListener('touchstart', (e) => {
-  e.preventDefault()
-  startHold()
-})
-sosBtn.addEventListener('mouseup', cancelHold)
-sosBtn.addEventListener('mouseleave', cancelHold)
-sosBtn.addEventListener('touchend', cancelHold)
-sosBtn.addEventListener('touchcancel', cancelHold)
-
-// --- MODAL LOGIC ---
+// --- MODAL LOGIC (called from DOMContentLoaded via setupModal()) ---
+function setupModal() {
 catBtns.forEach(btn => {
   btn.addEventListener('click', () => {
     catBtns.forEach(b => b.classList.remove('active'));
@@ -420,42 +439,25 @@ catBtns.forEach(btn => {
   });
 });
 
-// Issue 1 — Cancel: hide modal, abort voice, release mic, reset SOS button
-cancelBtn.addEventListener('click', () => {
-  // 1. Hide modal
-  categoryModal.style.display = 'none';
+  // Cancel: hide modal, abort voice, release mic, reset SOS button
+  cancelBtn.addEventListener('click', () => {
+    categoryModal.style.display = 'none';
+    if (activeRecognition) { try { activeRecognition.abort(); } catch (_) {} activeRecognition = null; }
+    if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+    if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
+    voiceTranscript = '';
+    updateVoiceUI('');
+    if (micBtn) micBtn.classList.remove('recording');
+    resetModal();
+  });
 
-  // 2. Abort any active SpeechRecognition
-  if (activeRecognition) {
-    try { activeRecognition.abort(); } catch (_) {}
-    activeRecognition = null;
-  }
-
-  // 3. Stop any active mic stream
-  if (activeStream) {
-    activeStream.getTracks().forEach(t => t.stop());
-    activeStream = null;
-  }
-
-  // 4. Reset SOS button to default state
-  sosProgress.style.transition = 'none';
-  sosProgress.style.strokeDashoffset = '339';
-  isHolding = false;
-  clearTimeout(holdTimer);
-
-  // 5. Clear transcript and voice UI
-  voiceTranscript = '';
-  updateVoiceUI('');
-  micBtn.classList.remove('recording');
-
-  resetModal();
-});
+}
 
 function resetModal() {
   selectedCategory = null;
   catBtns.forEach(b => b.classList.remove('active'));
-  incidentDesc.value = "";
-  voiceTranscript = "";
+  if (incidentDesc) incidentDesc.value = '';
+  voiceTranscript = '';
 }
 
 submitBtn.addEventListener('click', async () => {
@@ -480,7 +482,7 @@ submitBtn.addEventListener('click', async () => {
         ? formatCoords(currentCoords.lat, currentCoords.lng)
         : 'Unknown location';
 
-    const userProfile = getCurrentUser();
+  const userProfile = JSON.parse(sessionStorage.getItem('userProfile') || 'null');
 
     const docRef = await addDoc(collection(db, 'incidents'), {
       type: selectedCategory,

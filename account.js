@@ -65,7 +65,7 @@ onAuthStateChanged(auth, async (user) => {
   // Handle Edit Profile
   document.getElementById('editProfileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = document.getElementById('btnSaveProfile');
+    const btn = document.getElementById('saveChangesBtn');
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
@@ -100,7 +100,7 @@ onAuthStateChanged(auth, async (user) => {
   document.getElementById('changePwdForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     pwdError.style.display = 'none';
-    const btn = document.getElementById('btnUpdatePwd');
+    const btn = document.getElementById('updatePasswordBtn');
     
     const currentPwd = document.getElementById('currentPwd').value;
     const newPwd = document.getElementById('newPwd').value;
@@ -132,7 +132,7 @@ onAuthStateChanged(auth, async (user) => {
   });
 
   // Handle Delete Account
-  document.getElementById('btnDeleteAccount').addEventListener('click', async () => {
+  document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
     const confirmDelete = confirm("Are you sure? This will delete your account and all your reports permanently.");
     if (confirmDelete) {
       try {

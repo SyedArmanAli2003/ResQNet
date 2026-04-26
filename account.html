@@ -66,7 +66,40 @@
     .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 0.8rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-danger:hover { background: rgba(192,57,43,0.1); }
 
-    /* Force dark inputs */
+    /* Dark buttons override */
+    button {
+      background: #1a1d27 !important;
+      color: #f0f0f0 !important;
+      border: 1px solid #2a2d3a !important;
+      border-radius: 8px !important;
+      padding: 10px 20px !important;
+      font-size: 13px !important;
+      cursor: pointer !important;
+      width: auto !important;
+      font-family: inherit !important;
+    }
+    button:hover {
+      background: #22263a !important;
+      border-color: #444 !important;
+    }
+    #saveChangesBtn {
+      background: #0F6E56 !important;
+      border-color: #0a3020 !important;
+      color: #9FE1CB !important;
+    }
+    #updatePasswordBtn {
+      background: #185FA5 !important;
+      border-color: #0c3060 !important;
+      color: #B5D4F4 !important;
+    }
+    #deleteAccountBtn {
+      background: transparent !important;
+      border-color: #A32D2D !important;
+      color: #F09595 !important;
+    }
+    #deleteAccountBtn:hover {
+      background: #1a0808 !important;
+    }
     input, select, textarea {
       background: #0f1117 !important;
       border: 1px solid #2a2d3a !important;
@@ -125,7 +158,7 @@
           <label class="form-label">Address / Area</label>
           <input type="text" id="editAddress" class="form-input" required />
         </div>
-        <button type="submit" class="btn-save" id="btnSaveProfile">Save changes</button>
+        <button type="submit" class="btn-save" id="saveChangesBtn">Save changes</button>
       </form>
 
       <div class="divider"></div>
@@ -145,7 +178,7 @@
           <input type="password" id="confirmNewPwd" class="form-input" required minlength="8" />
         </div>
         <p id="pwdError" style="color:var(--red); font-size:0.85rem; display:none; margin-bottom:1rem;"></p>
-        <button type="submit" class="btn-save" id="btnUpdatePwd">Update password</button>
+        <button type="submit" class="btn-save" id="updatePasswordBtn">Update password</button>
       </form>
 
       <div class="divider"></div>
@@ -153,7 +186,7 @@
       <div class="danger-zone">
         <div class="section-heading" style="color: var(--red); margin-bottom: 0.5rem;">Danger zone</div>
         <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Once you delete your account, there is no going back. Please be certain.</p>
-        <button class="btn-danger" id="btnDeleteAccount">Delete account</button>
+        <button class="btn-danger" id="deleteAccountBtn">Delete account</button>
       </div>
     </div>
   </div>
