@@ -15,7 +15,19 @@ import {
 
 // Replace with your Gemini API key from AI Studio
 const GEMINI_API_KEY = 'AIzaSyDsAMXihRCUfud6VChVlCnfDLUDUUm45tE';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+const GEMINI_MODELS = [
+  {
+    name: 'gemini-3.0-flash',
+    label: 'Gemini 3 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${GEMINI_API_KEY}`
+  },
+  {
+    name: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash (free)',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+  }
+];
 
 // --- DOM ELEMENTS ---
 const sosBtn        = document.getElementById('sosBtn');
@@ -78,9 +90,8 @@ async function reverseGeocode(lat, lng) {
 }
 
 // --- GEMINI TRIAGE ---
-async function callGemini(incidentData) {
-  try {
-    const prompt = `You are an emergency triage AI.
+async function callGeminiWithFallback(incidentData) {
+  const prompt = `You are an emergency triage AI.
 Analyze this crisis and return ONLY valid JSON.
 No explanation, no markdown, no backticks.
 
@@ -100,41 +111,82 @@ Return exactly this shape:
 }
 
 Level guide:
-1 = Critical (red) — life threatening
+1 = Critical (red) — life threatening, immediate
 2 = Severe (orange) — urgent within 1 hour
 3 = Moderate (yellow) — serious but stable
-4 = Minor (green) — can wait
+4 = Minor (green) — can wait several hours
 5 = Monitoring (gray) — informational only`
 
-    const response = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 300
-        }
-      })
-    })
-
-    const data = await response.json()
-
-    if (data.error) {
-      console.error('[Gemini] API error:', data.error.message)
-      return null
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 300
     }
+  })
 
-    const text = data.candidates[0].content.parts[0].text
-    const clean = text.replace(/```json|```/g, '').trim()
-    const result = JSON.parse(clean)
-    console.log('[Gemini] Triage result:', result)
-    return result
+  for (const model of GEMINI_MODELS) {
+    try {
+      console.log(`[Gemini] Trying ${model.label}...`)
 
-  } catch (err) {
-    console.error('[Gemini] Failed:', err)
-    return null
+      const response = await fetch(model.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      })
+
+      const data = await response.json()
+
+      // If this model returned a billing/quota error, skip to next model
+      if (data.error) {
+        const code = data.error.code
+        const msg = data.error.message
+        console.warn(`[Gemini] ${model.label} failed (${code}): ${msg}`)
+
+        // These error codes mean we should try fallback
+        if (
+          code === 429 ||   // quota exceeded
+          code === 403 ||   // billing required
+          code === 404 ||   // model not found
+          msg?.includes('billing') ||
+          msg?.includes('quota') ||
+          msg?.includes('not found') ||
+          msg?.includes('deprecated')
+        ) {
+          console.log(`[Gemini] Falling back to next model...`)
+          continue
+        }
+
+        // Other errors (bad request etc) — don't retry
+        return null
+      }
+
+      // Success — parse and return result
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+      if (!text) {
+        console.warn(`[Gemini] ${model.label} returned empty response, trying fallback...`)
+        continue
+      }
+
+      const clean = text.replace(/```json|```/g, '').trim()
+      const result = JSON.parse(clean)
+
+      console.log(`[Gemini] Success with ${model.label}:`, result)
+
+      // Tag which model was used (for debugging)
+      result.modelUsed = model.label
+      return result
+
+    } catch (err) {
+      console.warn(`[Gemini] ${model.label} threw error:`, err.message)
+      continue
+    }
   }
+
+  // All models failed
+  console.error('[Gemini] All models failed')
+  return null
 }
 
 // --- VOICE CAPTURE (Issue 2: tap-to-record, user-initiated) ---
@@ -378,7 +430,7 @@ submitBtn.addEventListener('click', async () => {
     console.log(`[ResQNet] Firestore write success, id: ${docRef.id}`);
 
     // Trigger Gemini Triage asynchronously (don't block UI)
-    callGemini({
+    callGeminiWithFallback({
       type: selectedCategory,
       description: incidentDesc.value,
       voiceTranscript: voiceTranscript,
@@ -392,13 +444,14 @@ submitBtn.addEventListener('click', async () => {
           triageReasoning: triage.reasoning,
           volunteerTypes: triage.volunteerTypes,
           estimatedMinutes: triage.estimatedMinutes,
-          triageComplete: true
+          triageComplete: true,
+          modelUsed: triage.modelUsed || 'unknown'
         });
-        console.log('[ResQNet] Triage saved to Firestore');
+        console.log('[ResQNet] Triage saved:', triage.levelName, 'via', triage.modelUsed);
       } else {
         await updateDoc(docRef, {
           triageComplete: false,
-          triageReasoning: 'AI triage unavailable'
+          triageReasoning: 'AI triage unavailable — all models failed'
         });
       }
     });

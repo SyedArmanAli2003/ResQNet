@@ -220,6 +220,15 @@ function renderList(incidents) {
     let badgeColor = triage.color;
     if (triage.color === '#2a2d3a') badgeColor = '#8e96a3';
 
+    let modelBadge = '';
+    if (inc.triageComplete && inc.modelUsed) {
+      if (inc.modelUsed.includes('3.0')) {
+        modelBadge = `<span style="font-size: 10px; padding: 2px 6px; background: rgba(0, 150, 136, 0.2); color: #00bcd4; border: 1px solid rgba(0, 188, 212, 0.3); border-radius: 4px; font-weight: 700;">G3</span>`;
+      } else if (inc.modelUsed.includes('2.5')) {
+        modelBadge = `<span style="font-size: 10px; padding: 2px 6px; background: rgba(158, 158, 158, 0.15); color: #9e9e9e; border: 1px solid rgba(158, 158, 158, 0.3); border-radius: 4px; font-weight: 700;">G2.5</span>`;
+      }
+    }
+
     card.innerHTML = `
       <div class="coord-card-row-top">
         <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color}44; display:flex; align-items:center; gap:6px;">${inc.triageLevelName || triage.label}</span>
@@ -231,15 +240,18 @@ function renderList(incidents) {
         <p class="coord-card-ai">${aiReasoning}</p>
         ${inc.description ? `<p class="coord-card-desc">"${inc.description}"</p>` : ''}
       </div>
-      <div class="coord-card-footer">
+      <div class="coord-card-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="coord-chip-row">
           <span class="coord-chip">Paramedic</span>
           <span class="coord-chip">Rapid response</span>
           <span class="coord-chip">${isResolved ? '✅ Resolved' : '🔴 Active'}</span>
         </div>
-        ${!isResolved
-          ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>`
-          : ''}
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${modelBadge}
+          ${!isResolved
+            ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>`
+            : ''}
+        </div>
       </div>
     `;
 
