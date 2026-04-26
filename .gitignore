@@ -1,3 +1,4 @@
-# Sensitive files
-firebaseConfig.js
+config.js
 .env
+node_modules/
+.firebase/

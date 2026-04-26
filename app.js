@@ -13,8 +13,8 @@ import {
   updateDoc 
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// Replace with your Gemini API key from AI Studio
-const GEMINI_API_KEY = 'AIzaSyDsAMXihRCUfud6VChVlCnfDLUDUUm45tE';
+// API keys loaded from config.js
+const GEMINI_API_KEY = CONFIG.GEMINI_API_KEY;
 
 const GEMINI_MODELS = [
   {
