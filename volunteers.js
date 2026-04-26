@@ -145,3 +145,16 @@ function showToast(msg) {
   t.style.backgroundColor = '#2e7d32'; // green
   setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+// --- BACK NAVIGATION LOGIC ---
+const backLink = document.querySelector('.back-link');
+if (backLink) {
+  const cameFrom = sessionStorage.getItem('cameFrom');
+  if (cameFrom === 'reporter') {
+    backLink.href = 'reporter.html';
+  } else if (cameFrom === 'coordinator') {
+    backLink.href = 'coordinator.html';
+  } else {
+    backLink.href = 'index.html';
+  }
+}

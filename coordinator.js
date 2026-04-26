@@ -167,7 +167,7 @@ function getTriageDetails(inc) {
     case 2: return { color: '#854F0B', label: 'Level 2 — Severe',     rank: 2 };
     case 3: return { color: '#EF9F27', label: 'Level 3 — Moderate',   rank: 3 };
     case 4: return { color: '#3B6D11', label: 'Level 4 — Minor',      rank: 4 };
-    case 5: return { color: '#000000', label: 'Level 5 — Monitoring', rank: 5 };
+    case 5: return { color: '#555555', label: 'Level 5 — Monitoring', rank: 5 };
     default: return { color: '#2a2d3a', label: 'Pending', rank: 99, isPending: true };
   }
 }
@@ -217,14 +217,12 @@ function renderList(incidents) {
 
     // Badge styling matches triage color with some opacity, unless it's analyzing
     const badgeBg = triage.color === '#2a2d3a' ? '#1c2533' : triage.color + '33';
-    // For black, adjust badge color so it's visible on dark mode
     let badgeColor = triage.color;
     if (triage.color === '#2a2d3a') badgeColor = '#8e96a3';
-    if (triage.color === '#000000') badgeColor = '#999999';
 
     card.innerHTML = `
       <div class="coord-card-row-top">
-        <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color === '#000000' ? '#333' : triage.color+'44'}; display:flex; align-items:center; gap:6px;">${triage.label}</span>
+        <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color}44; display:flex; align-items:center; gap:6px;">${inc.triageLevelName || triage.label}</span>
         <span class="coord-time-ago">${timeLabel}</span>
       </div>
       <div class="coord-card-body">
@@ -553,3 +551,10 @@ if (settingsSignOut) {
     }
   });
 }
+
+// --- SIDEBAR NAVIGATION LOGIC ---
+document.querySelectorAll('.coord-nav-link').forEach(link => {
+  link.addEventListener('click', () => {
+    sessionStorage.setItem('cameFrom', 'coordinator');
+  });
+});

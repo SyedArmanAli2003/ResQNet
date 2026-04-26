@@ -118,3 +118,16 @@ filterTabs.forEach(tab => {
     listenToHistory();
   });
 });
+
+// --- BACK NAVIGATION LOGIC ---
+const backLink = document.querySelector('.back-link');
+if (backLink) {
+  const cameFrom = sessionStorage.getItem('cameFrom');
+  if (cameFrom === 'reporter') {
+    backLink.href = 'reporter.html';
+  } else if (cameFrom === 'coordinator') {
+    backLink.href = 'coordinator.html';
+  } else {
+    backLink.href = 'index.html';
+  }
+}

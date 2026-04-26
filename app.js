@@ -14,7 +14,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // Replace with your Gemini API key from AI Studio
-const GEMINI_API_KEY = 'YOUR_KEY_HERE';
+const GEMINI_API_KEY = 'AIzaSyDsAMXihRCUfud6VChVlCnfDLUDUUm45tE';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 // --- DOM ELEMENTS ---
 const sosBtn        = document.getElementById('sosBtn');
@@ -77,50 +78,62 @@ async function reverseGeocode(lat, lng) {
 }
 
 // --- GEMINI TRIAGE ---
-async function runGeminiTriage(incident) {
-  console.log("[ResQNet] Starting Gemini triage...");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`;
-  
-  const prompt = `You are an emergency triage AI. Analyze this crisis report and return ONLY a valid JSON object with no explanation, no markdown backticks.
+async function callGemini(incidentData) {
+  try {
+    const prompt = `You are an emergency triage AI.
+Analyze this crisis and return ONLY valid JSON.
+No explanation, no markdown, no backticks.
 
-Incident:
-Type: ${incident.type}
-Description: ${incident.description || 'No description'}  
-Location: ${incident.location}
+Type: ${incidentData.type}
+Description: ${incidentData.description || 'none'}
+Voice: ${incidentData.voiceTranscript || 'none'}
+Location: ${incidentData.location}
 
-Return exactly:
+Return exactly this shape:
 {
   "level": 1,
   "levelName": "Critical",
   "color": "red",
   "reasoning": "one sentence max",
-  "volunteerTypes": ["type1", "type2", "type3"],
+  "volunteerTypes": ["type1", "type2"],
   "estimatedMinutes": 10
 }
 
-Level guide: 1=Critical(red), 2=Severe(orange), 3=Moderate(yellow), 4=Minor(green), 5=Monitoring(black)`;
+Level guide:
+1 = Critical (red) — life threatening
+2 = Severe (orange) — urgent within 1 hour
+3 = Moderate (yellow) — serious but stable
+4 = Minor (green) — can wait
+5 = Monitoring (gray) — informational only`
 
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
-  };
-
-  try {
-    const res = await fetch(url, {
+    const response = await fetch(GEMINI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    
-    const data = await res.json();
-    const text = data.candidates[0].content.parts[0].text;
-    const clean = text.replace(/```json|```/g, '').trim();
-    const result = JSON.parse(clean);
-    console.log(`[ResQNet] Gemini response received: level ${result.level}`);
-    return result;
-  } catch (error) {
-    console.error("[ResQNet] Failed to parse Gemini response:", error);
-    throw error;
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 300
+        }
+      })
+    })
+
+    const data = await response.json()
+
+    if (data.error) {
+      console.error('[Gemini] API error:', data.error.message)
+      return null
+    }
+
+    const text = data.candidates[0].content.parts[0].text
+    const clean = text.replace(/```json|```/g, '').trim()
+    const result = JSON.parse(clean)
+    console.log('[Gemini] Triage result:', result)
+    return result
+
+  } catch (err) {
+    console.error('[Gemini] Failed:', err)
+    return null
   }
 }
 
@@ -364,27 +377,30 @@ submitBtn.addEventListener('click', async () => {
 
     console.log(`[ResQNet] Firestore write success, id: ${docRef.id}`);
 
-    // Trigger Gemini Triage asynchronously (don't await it so UI isn't blocked)
-    runGeminiTriage({
+    // Trigger Gemini Triage asynchronously (don't block UI)
+    callGemini({
       type: selectedCategory,
       description: incidentDesc.value,
-      location: safeLocation,
       voiceTranscript: voiceTranscript,
-      timestamp: { toDate: () => new Date() } // Mock timestamp for triage since serverTimestamp() takes time
-    }).then(result => {
-      updateDoc(docRef, {
-        triageLevel: result.level,
-        triageLevelName: result.levelName,
-        triageColor: result.color,
-        triageReasoning: result.reasoning,
-        volunteerTypes: result.volunteerTypes,
-        estimatedMinutes: result.estimatedMinutes,
-        triageComplete: true
-      }).then(() => {
-        console.log("[ResQNet] Firestore triage update complete");
-      });
-    }).catch(err => {
-      console.error("[ResQNet] Gemini triage failed:", err);
+      location: safeLocation
+    }).then(async (triage) => {
+      if (triage) {
+        await updateDoc(docRef, {
+          triageLevel: triage.level,
+          triageLevelName: triage.levelName,
+          triageColor: triage.color,
+          triageReasoning: triage.reasoning,
+          volunteerTypes: triage.volunteerTypes,
+          estimatedMinutes: triage.estimatedMinutes,
+          triageComplete: true
+        });
+        console.log('[ResQNet] Triage saved to Firestore');
+      } else {
+        await updateDoc(docRef, {
+          triageComplete: false,
+          triageReasoning: 'AI triage unavailable'
+        });
+      }
     });
 
     // Success — show modal
@@ -412,15 +428,12 @@ submitBtn.addEventListener('click', async () => {
               case 2: colorHex = '#854F0B'; break;
               case 3: colorHex = '#EF9F27'; break;
               case 4: colorHex = '#3B6D11'; break;
-              case 5: colorHex = '#000000'; break;
+              case 5: colorHex = '#555555'; break;
             }
             
-            if (data.triageLevel >= 1 && data.triageLevel <= 4) {
+            if (data.triageLevel >= 1 && data.triageLevel <= 5) {
               bgHex = colorHex + '33';
               fontColor = colorHex;
-            } else if (data.triageLevel === 5) {
-              bgHex = '#00000033';
-              fontColor = '#999999';
             }
             
             badgeEl.textContent = data.triageLevelName || \`Level \${data.triageLevel}\`;
@@ -553,3 +566,10 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+// --- SIDEBAR NAVIGATION LOGIC ---
+document.querySelectorAll('.sidebar-link').forEach(link => {
+  link.addEventListener('click', () => {
+    sessionStorage.setItem('cameFrom', 'reporter');
+  });
+});
