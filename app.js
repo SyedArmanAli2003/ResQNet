@@ -32,9 +32,23 @@ const GEMINI_MODELS = [
 ];
 
 // --- DOM ELEMENTS (lazily grabbed inside DOMContentLoaded) ---
-let sosBtn, sosProgress, categoryModal, gpsStatus, micBtn, voiceStatus,
-    submitError, catBtns, incidentDesc, submitBtn, cancelBtn,
-    successModal, btnSubmitAnother, incidentsList, activeCountEl, resolvedCountEl;
+// ─── DOM ELEMENTS (safe: type=module scripts are deferred, DOM is ready) ────
+const sosBtn          = document.getElementById('sosBtn');
+const sosProgress     = document.getElementById('sosProgressCircle');
+const categoryModal   = document.getElementById('categoryModal');
+const gpsStatus       = document.getElementById('gpsStatus');
+const micBtn          = document.getElementById('micBtn');
+const voiceStatus     = document.getElementById('voiceStatus');
+const submitError     = document.getElementById('submitError');
+const catBtns         = document.querySelectorAll('.cat-btn');
+const incidentDesc    = document.getElementById('incidentDesc');
+const submitBtn       = document.getElementById('submitIncident');
+const cancelBtn       = document.getElementById('cancelModal');
+const successModal    = document.getElementById('successModal');
+const btnSubmitAnother = document.getElementById('btnSubmitAnother');
+const incidentsList   = document.getElementById('incidentsList');
+const activeCountEl   = document.getElementById('activeCount');
+const resolvedCountEl = document.getElementById('resolvedCount');
 
 // --- STATE ---
 let currentCoords = null;
@@ -46,7 +60,64 @@ function formatCoords(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
-// ─── AUTH: fires immediately, separate from DOM setup ───────────────────────
+// ─── SOS HOLD LOGIC ──────────────────────────────────────────────────────────
+if (sosBtn) {
+  let holdTimer = null;
+  let holdStarted = false;
+
+  function startHold() {
+    holdStarted = true;
+    sosBtn.style.transform = 'scale(0.95)';
+    sosBtn.style.boxShadow = '0 0 0 8px rgba(163,45,45,0.3)';
+    if (sosProgress) {
+      sosProgress.style.strokeDashoffset = '0';
+      sosProgress.style.transition = 'stroke-dashoffset 2s linear';
+    }
+    holdTimer = setTimeout(() => {
+      if (holdStarted) {
+        sosBtn.style.transform = 'scale(1)';
+        sosBtn.style.boxShadow = 'none';
+        if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
+        triggerSOS();
+      }
+    }, 2000);
+  }
+
+  function cancelHold() {
+    holdStarted = false;
+    clearTimeout(holdTimer);
+    sosBtn.style.transform = 'scale(1)';
+    sosBtn.style.boxShadow = 'none';
+    if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
+  }
+
+  sosBtn.addEventListener('mousedown', startHold);
+  sosBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, { passive: false });
+  sosBtn.addEventListener('mouseup', cancelHold);
+  sosBtn.addEventListener('mouseleave', cancelHold);
+  sosBtn.addEventListener('touchend', cancelHold);
+  sosBtn.addEventListener('touchcancel', cancelHold);
+  console.log('[SOS] Button events attached');
+} else {
+  console.error('[SOS] sosBtn element not found!');
+}
+
+// ─── SIGN OUT ─────────────────────────────────────────────────────────────────
+const signOutBtn = document.getElementById('signOutBtn');
+if (signOutBtn) {
+  signOutBtn.addEventListener('click', async () => {
+    try {
+      await signOut(auth);
+      sessionStorage.clear();
+      window.location.href = 'auth.html';
+    } catch (err) {
+      console.error('[Auth] Sign out error:', err);
+      alert('Sign out failed: ' + err.message);
+    }
+  });
+}
+
+// ─── AUTH STATE: guard page and load profile ──────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     console.log('[Auth] No user — redirecting to auth.html');
@@ -55,7 +126,6 @@ onAuthStateChanged(auth, async (user) => {
   }
   console.log('[Auth] User logged in:', user.email);
   await loadUserProfile(user);
-  // Start listening after auth confirmed
   listenToIncidents();
 });
 
@@ -99,87 +169,10 @@ async function loadUserProfile(user) {
   }
 }
 
-// ─── DOM SETUP: runs after DOM is ready ─────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  // Grab all DOM elements
-  sosBtn          = document.getElementById('sosBtn');
-  sosProgress     = document.getElementById('sosProgressCircle');
-  categoryModal   = document.getElementById('categoryModal');
-  gpsStatus       = document.getElementById('gpsStatus');
-  micBtn          = document.getElementById('micBtn');
-  voiceStatus     = document.getElementById('voiceStatus');
-  submitError     = document.getElementById('submitError');
-  catBtns         = document.querySelectorAll('.cat-btn');
-  incidentDesc    = document.getElementById('incidentDesc');
-  submitBtn       = document.getElementById('submitIncident');
-  cancelBtn       = document.getElementById('cancelModal');
-  successModal    = document.getElementById('successModal');
-  btnSubmitAnother = document.getElementById('btnSubmitAnother');
-  incidentsList   = document.getElementById('incidentsList');
-  activeCountEl   = document.getElementById('activeCount');
-  resolvedCountEl = document.getElementById('resolvedCount');
 
-  // ── SOS HOLD LOGIC ────────────────────────────────────────────────────────
-  if (sosBtn) {
-    let holdTimer = null;
-    let holdStarted = false;
-
-    function startHold() {
-      holdStarted = true;
-      sosBtn.style.transform = 'scale(0.95)';
-      sosBtn.style.boxShadow = '0 0 0 8px rgba(163,45,45,0.3)';
-      if (sosProgress) {
-        sosProgress.style.strokeDashoffset = '0';
-        sosProgress.style.transition = 'stroke-dashoffset 2s linear';
-      }
-      holdTimer = setTimeout(() => {
-        if (holdStarted) {
-          sosBtn.style.transform = 'scale(1)';
-          sosBtn.style.boxShadow = 'none';
-          if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
-          triggerSOS();
-        }
-      }, 2000);
-    }
-
-    function cancelHold() {
-      holdStarted = false;
-      clearTimeout(holdTimer);
-      sosBtn.style.transform = 'scale(1)';
-      sosBtn.style.boxShadow = 'none';
-      if (sosProgress) { sosProgress.style.transition = 'none'; sosProgress.style.strokeDashoffset = '339'; }
-    }
-
-    sosBtn.addEventListener('mousedown', startHold);
-    sosBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, { passive: false });
-    sosBtn.addEventListener('mouseup', cancelHold);
-    sosBtn.addEventListener('mouseleave', cancelHold);
-    sosBtn.addEventListener('touchend', cancelHold);
-    sosBtn.addEventListener('touchcancel', cancelHold);
-    console.log('[SOS] Button events attached');
-  } else {
-    console.error('[SOS] sosBtn element not found!');
-  }
-
-  // ── SIGN OUT ──────────────────────────────────────────────────────────────
-  const signOutBtn = document.getElementById('signOutBtn');
-  if (signOutBtn) {
-    signOutBtn.addEventListener('click', async () => {
-      try {
-        await signOut(auth);
-        sessionStorage.clear();
-        window.location.href = 'auth.html';
-      } catch (err) {
-        console.error('[Auth] Sign out error:', err);
-        alert('Sign out failed: ' + err.message);
-      }
-    });
-  }
-
-  // Wire up all other DOM-dependent code
-  setupMicButton();
-  setupModal();
-});
+// Wire up mic and modal (safe at module top level — DOM is ready)
+setupMicButton();
+setupModal();
 
 
 // --- GPS & REVERSE GEOCODING ---
