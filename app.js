@@ -1,7 +1,7 @@
 // NOTE: Must be served via localhost or HTTPS for mic to work
 // Run with: npx serve .
 // Then open http://localhost:3000
-import { db, auth, signOut } from './firebaseConfig.js';
+import { db, auth, signOut, onAuthStateChanged } from './firebaseConfig.js';
 import { getCurrentUser } from './auth.js';
 import { 
   collection, 
@@ -11,7 +11,8 @@ import {
   orderBy, 
   serverTimestamp, 
   doc, 
-  updateDoc 
+  updateDoc,
+  getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // API keys loaded from config.js
@@ -61,30 +62,45 @@ function formatCoords(lat, lng) {
 }
 
 // Initialize
-async function init() {
-  const user = getCurrentUser();
-  if (user) {
-    const pContainer = document.getElementById('reporterProfile');
-    if (pContainer) {
-      pContainer.style.display = 'flex';
-      document.getElementById('rpName').textContent = user.fullName || 'User';
-      document.getElementById('rpEmail').textContent = user.email || '';
-      document.getElementById('rpAvatar').textContent = (user.fullName || 'U').substring(0, 2).toUpperCase();
-    }
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    window.location.href = 'auth.html'
+    return
   }
+  
+  // Get full profile from Firestore
+  const userDoc = await getDoc(
+    doc(db, 'users', user.uid))
+  const profile = userDoc.exists() ? 
+    userDoc.data() : null
 
-  const btnSignOut = document.getElementById('btnSignOut');
-  if (btnSignOut) {
-    btnSignOut.addEventListener('click', async () => {
-      await signOut(auth);
-      sessionStorage.removeItem('userProfile');
-      window.location.href = 'auth.html';
-    });
-  }
+  const name = profile?.fullName || 
+    user.displayName || 'User'
+  const email = user.email || ''
+  const initials = name.split(' ')
+    .map(n => n[0]).join('').toUpperCase()
+    .slice(0, 2)
+
+  document.getElementById('userName').textContent = name
+  document.getElementById('userEmail').textContent = email
+  document.getElementById('userAvatar').textContent = 
+    initials
+
+  // Store for use in incident submission
+  sessionStorage.setItem('userProfile', 
+    JSON.stringify({ ...profile, uid: user.uid, email }))
 
   listenToIncidents();
+});
+
+const btnSignOut = document.getElementById('signOutBtn');
+if (btnSignOut) {
+  btnSignOut.addEventListener('click', async () => {
+    await signOut(auth);
+    sessionStorage.removeItem('userProfile');
+    window.location.href = 'auth.html';
+  });
 }
-init();
 
 // --- GPS & REVERSE GEOCODING ---
 async function getPosition() {

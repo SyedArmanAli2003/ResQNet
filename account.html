@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ResQNet — Account Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { background: var(--bg); overflow-y: auto; }
+    .account-layout {
+      display: flex;
+      gap: 2rem;
+      max-width: 1000px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    @media (max-width: 768px) {
+      .account-layout { flex-direction: column; }
+    }
+    .profile-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      text-align: center;
+      flex: 1;
+      min-width: 280px;
+    }
+    .avatar-large {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--red);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0 auto 1rem;
+    }
+    .profile-name { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.2rem; }
+    .profile-email { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .stat-row { display: flex; justify-content: space-between; padding: 0.8rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--muted); }
+    
+    .settings-form-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      flex: 2;
+    }
+    .section-heading { font-size: 1.2rem; font-weight: 600; margin-bottom: 1.5rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.2rem; }
+    .form-label { font-size: 0.85rem; color: var(--muted); }
+    .form-input { background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: white; padding: 0.8rem; border-radius: 6px; font-family: inherit; font-size: 0.95rem; width: 100%; }
+    .form-input:focus { border-color: rgba(255,255,255,0.2); outline: none; }
+    .btn-save { background: white; color: black; border: none; padding: 0.8rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-save:hover { background: #e0e0e0; }
+    .divider { height: 1px; background: var(--border); margin: 2rem 0; }
+    
+    .danger-zone { border: 1px solid rgba(192,57,43,0.3); border-radius: var(--radius); padding: 1.5rem; }
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 0.8rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-danger:hover { background: rgba(192,57,43,0.1); }
+  </style>
+</head>
+<body>
+  <header style="padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+    <a href="index.html" style="text-decoration: none;">
+      <h1 style="margin:0; font-size: 1.5rem; font-weight: 900; letter-spacing:-1px; color:var(--text);">Res<span style="color:var(--red)">Q</span>Net</h1>
+    </a>
+    <div style="display:flex; align-items:center; gap: 1.5rem;">
+      <a href="reporter.html" style="color: var(--muted); text-decoration: none; font-size: 0.9rem;">← Back</a>
+      <span style="font-weight: 600;">Account settings</span>
+    </div>
+  </header>
+
+  <div class="account-layout">
+    <!-- SECTION 1: Profile Card -->
+    <div class="profile-card">
+      <div class="avatar-large" id="accAvatar">??</div>
+      <div class="profile-name" id="accName">Loading...</div>
+      <div class="profile-email" id="accEmail">...</div>
+      
+      <div class="stat-row">
+        <span class="stat-label">Member since</span>
+        <span id="accSince">...</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Total reports</span>
+        <span id="accReports">...</span>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Edit Form -->
+    <div class="settings-form-section">
+      <div class="section-heading">Edit profile</div>
+      <form id="editProfileForm">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="editName" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input type="tel" id="editPhone" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Address / Area</label>
+          <input type="text" id="editAddress" class="form-input" required />
+        </div>
+        <button type="submit" class="btn-save" id="btnSaveProfile">Save changes</button>
+      </form>
+
+      <div class="divider"></div>
+
+      <div class="section-heading">Change password</div>
+      <form id="changePwdForm">
+        <div class="form-group">
+          <label class="form-label">Current Password</label>
+          <input type="password" id="currentPwd" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">New Password (min 8 chars)</label>
+          <input type="password" id="newPwd" class="form-input" required minlength="8" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm New Password</label>
+          <input type="password" id="confirmNewPwd" class="form-input" required minlength="8" />
+        </div>
+        <p id="pwdError" style="color:var(--red); font-size:0.85rem; display:none; margin-bottom:1rem;"></p>
+        <button type="submit" class="btn-save" id="btnUpdatePwd">Update password</button>
+      </form>
+
+      <div class="divider"></div>
+
+      <div class="danger-zone">
+        <div class="section-heading" style="color: var(--red); margin-bottom: 0.5rem;">Danger zone</div>
+        <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Once you delete your account, there is no going back. Please be certain.</p>
+        <button class="btn-danger" id="btnDeleteAccount">Delete account</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  
+  <script src="config.js"></script>
+  <script src="account.js" type="module"></script>
+</body>
+</html>

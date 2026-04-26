@@ -809,3 +809,78 @@ body.coord-page {
     background: #1b1f2c;
   }
 }
+
+/* ── ACCOUNT SETTINGS & SIDEBAR BOTTOM ── */
+.sidebar-bottom {
+  margin-top: auto;
+  padding: 12px 14px;
+  border-top: 1px solid #1e1e24;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #1a1a24;
+  border-radius: 8px;
+  border: 1px solid #2a2a38;
+}
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #A32D2D;
+  color: #FCEBEB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.user-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-email {
+  font-size: 10px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+.account-settings-link {
+  font-size: 11px;
+  color: #666;
+  text-decoration: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #2a2a38;
+  text-align: center;
+  display: block;
+}
+.account-settings-link:hover {
+  color: #aaa;
+  border-color: #444;
+}
+.signout-btn {
+  font-size: 11px;
+  color: #A32D2D;
+  background: transparent;
+  border: 1px solid #3d1a1a;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  width: 100%;
+}
+.signout-btn:hover {
+  background: #1a0808;
+}
