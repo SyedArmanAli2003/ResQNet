@@ -1,6 +1,7 @@
 // NOTE: Must be served via localhost or HTTPS for mic to work
 // Run with: npx serve .
 // Then open http://localhost:3000
+console.log('[app.js] Script loaded successfully')
 import { db, auth, signOut, onAuthStateChanged } from './firebaseConfig.js';
 import { 
   collection, 
