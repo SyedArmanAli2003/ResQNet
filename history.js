@@ -128,6 +128,6 @@ if (backLink) {
   } else if (cameFrom === 'coordinator') {
     backLink.href = 'coordinator.html';
   } else {
-    backLink.href = 'index.html';
+    backLink.href = 'reporter.html';
   }
 }
