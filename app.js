@@ -154,7 +154,14 @@ async function loadUserProfile(user) {
     const avatarEl = document.getElementById('userAvatar');
     const nameEl   = document.getElementById('userName');
     const emailEl  = document.getElementById('userEmail');
-    if (avatarEl) avatarEl.textContent = initials;
+    const photoURL  = user.photoURL || (userDocSnap.exists() ? userDocSnap.data().avatar : '');
+    if (avatarEl) {
+      if (photoURL) {
+        avatarEl.innerHTML = `<img src="${photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" alt="avatar">`;
+      } else {
+        avatarEl.textContent = initials;
+      }
+    }
     if (nameEl)   nameEl.textContent   = name;
     if (emailEl)  emailEl.textContent  = email;
   } catch (err) {
