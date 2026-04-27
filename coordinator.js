@@ -1,5 +1,7 @@
 import { db, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from './firebaseConfig.js';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+window.__coordBooted = true;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const authModal     = document.getElementById('authModal');
@@ -21,6 +23,7 @@ const statActiveNum  = document.getElementById('statActiveNum');
 const statDeployedNum= document.getElementById('statDeployedNum');
 const statResolvedNum= document.getElementById('statResolvedNum');
 const statAvgResponse= document.getElementById('statAvgResponse');
+const statPendingTriage = document.getElementById('statPendingTriage');
 
 // ── AUTH — Firebase email/password ───────────────────────────────────────────
 
@@ -125,6 +128,7 @@ function startListening() {
   unsubscribe = onSnapshot(q, (snapshot) => {
     let activeCount = 0;
     let resolvedTodayCount = 0;
+    let pendingTriageCount = 0;
     const incidents = [];
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -133,16 +137,39 @@ function startListening() {
       const data = docSnap.data();
       incidents.push({ id: docSnap.id, ...data });
 
+      const tsMs = data?.timestamp?.toDate?.()?.getTime?.() || 0;
+      const stalePending = tsMs > 0 && (Date.now() - tsMs) > (5 * 60 * 1000);
+      if (
+        data.status !== 'resolved' &&
+        data.triageLevel == null &&
+        data.triageComplete !== true &&
+        stalePending
+      ) {
+        const fallback = fallbackTriageForType(data.type || 'Unknown', data.description || data.voiceTranscript || '');
+        updateDoc(doc(db, 'incidents', docSnap.id), {
+          triageLevel: fallback.level,
+          triageLevelName: fallback.levelName,
+          triageReasoning: fallback.reasoning,
+          triageComplete: true,
+          modelUsed: 'Coordinator auto-fallback'
+        }).catch(() => {
+          // Ignore transient write errors; next snapshot will retry if still stale.
+        });
+      }
+
       if (data.status === 'resolved') {
         const ts = data.timestamp?.toDate?.();
         if (ts && ts >= startOfToday) resolvedTodayCount++;
       } else {
         activeCount++;
+        if (data.triageComplete !== true || data.triageLevel == null) {
+          pendingTriageCount++;
+        }
       }
     });
 
     const deployedCount = activeCount * 2;
-    updateStats(activeCount, deployedCount, resolvedTodayCount);
+    updateStats(activeCount, deployedCount, resolvedTodayCount, pendingTriageCount);
     renderList(incidents);
 
   }, (err) => {
@@ -152,7 +179,31 @@ function startListening() {
 }
 
 // ── TRIAGE LOGIC (Bug 6) ──────────────────────────────────────────────────────
+function triageVisual(level) {
+  switch (level) {
+    case 1: return { color: '#A32D2D', label: 'Level 1 — Critical', rank: 1 };
+    case 2: return { color: '#854F0B', label: 'Level 2 — Severe', rank: 2 };
+    case 3: return { color: '#EF9F27', label: 'Level 3 — Moderate', rank: 3 };
+    case 4: return { color: '#3B6D11', label: 'Level 4 — Minor', rank: 4 };
+    case 5: return { color: '#555555', label: 'Level 5 — Monitoring', rank: 5 };
+    default: return { color: '#2a2d3a', label: 'Pending', rank: 99, isPending: true };
+  }
+}
+
 function getTriageDetails(inc) {
+  const tsMs = inc?.timestamp?.toDate?.()?.getTime?.() || 0;
+  const stalePending = tsMs > 0 && (Date.now() - tsMs) > (5 * 60 * 1000);
+
+  if ((inc.triageComplete === false || inc.triageLevel == null) && stalePending) {
+    const fb = fallbackTriageForType(inc.type || 'Unknown', inc.description || inc.voiceTranscript || '');
+    return triageVisual(fb.level);
+  }
+
+  if ((inc.triageComplete === false || inc.triageLevel == null) && inc.triageReasoning) {
+    const fb = fallbackTriageForType(inc.type || 'Unknown', inc.description || inc.voiceTranscript || '');
+    return triageVisual(fb.level);
+  }
+
   if (inc.triageComplete === false || inc.triageLevel == null) {
     return {
       color: '#2a2d3a', // default border
@@ -162,14 +213,7 @@ function getTriageDetails(inc) {
     };
   }
 
-  switch (inc.triageLevel) {
-    case 1: return { color: '#A32D2D', label: 'Level 1 — Critical',   rank: 1 };
-    case 2: return { color: '#854F0B', label: 'Level 2 — Severe',     rank: 2 };
-    case 3: return { color: '#EF9F27', label: 'Level 3 — Moderate',   rank: 3 };
-    case 4: return { color: '#3B6D11', label: 'Level 4 — Minor',      rank: 4 };
-    case 5: return { color: '#555555', label: 'Level 5 — Monitoring', rank: 5 };
-    default: return { color: '#2a2d3a', label: 'Pending', rank: 99, isPending: true };
-  }
+  return triageVisual(inc.triageLevel);
 }
 
 function getAiReasoning(inc) {
@@ -177,6 +221,10 @@ function getAiReasoning(inc) {
   if (inc.triageReasoning) return inc.triageReasoning;
   if (inc.voiceTranscript) return `Voice context: "${inc.voiceTranscript}"`;
   return 'AI triage: prioritizing available responders by severity and proximity.';
+}
+
+function hasFinalTriage(inc) {
+  return inc.triageComplete === true && inc.triageLevel != null;
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
@@ -229,9 +277,13 @@ function renderList(incidents) {
       }
     }
 
+    const levelLabel = hasFinalTriage(inc)
+      ? (inc.triageLevelName || triage.label)
+      : triage.label;
+
     card.innerHTML = `
       <div class="coord-card-row-top">
-        <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color}44; display:flex; align-items:center; gap:6px;">${inc.triageLevelName || triage.label}</span>
+        <span class="coord-level-badge" style="background:${badgeBg}; color:${badgeColor}; border:1px solid ${triage.color}44; display:flex; align-items:center; gap:6px;">${levelLabel}</span>
         <span class="coord-time-ago">${timeLabel}</span>
       </div>
       <div class="coord-card-body">
@@ -277,13 +329,14 @@ function renderList(incidents) {
 }
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
-function updateStats(activeCount, deployedCount, resolvedCount) {
+function updateStats(activeCount, deployedCount, resolvedCount, pendingTriageCount = 0) {
   hdrActiveNum.textContent    = activeCount;
   hdrDeployedNum.textContent  = deployedCount;
   hdrResolvedNum.textContent  = resolvedCount;
   statActiveNum.textContent   = activeCount;
   statDeployedNum.textContent = deployedCount;
   statResolvedNum.textContent = resolvedCount;
+  if (statPendingTriage) statPendingTriage.textContent = pendingTriageCount;
   const avg = activeCount > 0 ? Math.max(4, 12 - Math.min(activeCount, 8)) : 0;
   statAvgResponse.textContent = avg > 0 ? `${avg}m` : '--';
 }
@@ -405,6 +458,60 @@ document.querySelectorAll('.vol-filter').forEach(btn => {
 
 // ── REPORT PANEL (Bug 5) ────────────────────────────────────────────────────
 let panelSelectedCategory = null;
+
+function fallbackTriageForType(type, description = '') {
+  const desc = description.toLowerCase();
+
+  if (type === 'Medical') {
+    const isCritical = ['bleeding', 'unconscious', 'heart', 'stroke', 'severe'].some(k => desc.includes(k));
+    return {
+      level: isCritical ? 1 : 2,
+      levelName: isCritical ? 'Level 1 — Critical' : 'Level 2 — Severe',
+      reasoning: isCritical
+        ? 'Rule-based triage detected life-threatening medical signals.'
+        : 'Rule-based triage marked this as urgent medical assistance.'
+    };
+  }
+
+  if (type === 'Conflict') {
+    return {
+      level: 3,
+      levelName: 'Level 3 — Moderate',
+      reasoning: 'Rule-based triage marked conflict reports as moderate priority.'
+    };
+  }
+
+  if (type === 'Disaster') {
+    return {
+      level: 2,
+      levelName: 'Level 2 — Severe',
+      reasoning: 'Rule-based triage marked disaster reports as severe for area response.'
+    };
+  }
+
+  if (type === 'Resource') {
+    return {
+      level: 4,
+      levelName: 'Level 4 — Minor',
+      reasoning: 'Rule-based triage marked this as a non-life-threatening resource request.'
+    };
+  }
+
+  if (type === 'Hospitality') {
+    return {
+      level: 5,
+      levelName: 'Level 5 — Monitoring',
+      reasoning: 'Rule-based triage marked this as monitoring/support request.'
+    };
+  }
+
+  return {
+    level: 3,
+    levelName: 'Level 3 — Moderate',
+    reasoning: 'Rule-based triage assigned moderate priority by default.'
+  };
+}
+
 document.querySelectorAll('#panel-report .cat-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#panel-report .cat-btn').forEach(b => b.classList.remove('selected'));
@@ -427,14 +534,20 @@ if (panelSubmitBtn) {
     panelSubmitBtn.textContent = 'Submitting...';
     
     try {
+      const fallback = fallbackTriageForType(panelSelectedCategory, desc);
+
       await addDoc(collection(db, 'incidents'), {
         type: panelSelectedCategory,
         description: desc,
         location: loc,
         timestamp: serverTimestamp(),
         status: 'pending',
-        triageLevel: null,
-        triageComplete: false
+        triageLevel: fallback.level,
+        triageLevelName: fallback.levelName,
+        triageReasoning: fallback.reasoning,
+        triageComplete: true,
+        modelUsed: 'Coordinator rule-based',
+        reporterName: auth.currentUser?.email || 'Coordinator'
       });
       document.getElementById('panelSuccessMsg').style.display = 'block';
       setTimeout(() => {
@@ -561,6 +674,78 @@ if (settingsSignOut) {
     } catch (error) {
       console.log('sign out error: ' + error.message);
     }
+  });
+}
+
+const runTriageTestBtn = document.getElementById('runTriageTestBtn');
+const triageTestResult = document.getElementById('triageTestResult');
+
+if (runTriageTestBtn && triageTestResult) {
+  runTriageTestBtn.addEventListener('click', () => {
+    runTriageTestBtn.disabled = true;
+    runTriageTestBtn.textContent = 'Running...';
+
+    const cases = [
+      {
+        name: 'Level 1 Critical',
+        type: 'Medical',
+        description: 'Unconscious patient with severe bleeding',
+        expected: 1
+      },
+      {
+        name: 'Level 2 Severe',
+        type: 'Disaster',
+        description: 'Flood alert and urgent evacuation',
+        expected: 2
+      },
+      {
+        name: 'Level 3 Moderate',
+        type: 'Conflict',
+        description: 'Local conflict situation under observation',
+        expected: 3
+      },
+      {
+        name: 'Level 4 Minor',
+        type: 'Resource',
+        description: 'Water and blankets request',
+        expected: 4
+      },
+      {
+        name: 'Level 5 Monitoring',
+        type: 'Hospitality',
+        description: 'Shelter capacity informational update',
+        expected: 5
+      }
+    ];
+
+    const rows = cases.map((t) => {
+      const got = fallbackTriageForType(t.type, t.description).level;
+      const pass = got === t.expected;
+      return {
+        label: t.name,
+        expected: t.expected,
+        got,
+        pass
+      };
+    });
+
+    const passCount = rows.filter(r => r.pass).length;
+    const allPassed = passCount === rows.length;
+
+    triageTestResult.innerHTML = [
+      `<div style="margin-bottom:0.4rem; font-weight:600; color:${allPassed ? '#4CAF50' : '#F57C00'};">${allPassed ? 'PASS' : 'PARTIAL'} — ${passCount}/${rows.length} checks</div>`,
+      ...rows.map(r => (
+        `<div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:2px; color:${r.pass ? '#9FE1CB' : '#ffb4a9'};">` +
+          `<span>${r.pass ? 'PASS' : 'FAIL'} ${r.label}</span>` +
+          `<span>expected L${r.expected}, got L${r.got}</span>` +
+        `</div>`
+      ))
+    ].join('');
+
+    showToast(allPassed ? 'Triage self-test passed (5/5).' : `Triage self-test: ${passCount}/5 passed.`);
+
+    runTriageTestBtn.disabled = false;
+    runTriageTestBtn.textContent = 'Run 5-level test';
   });
 }
 

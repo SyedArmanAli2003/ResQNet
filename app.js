@@ -20,16 +20,93 @@ const GEMINI_API_KEY = CONFIG.GEMINI_API_KEY;
 
 const GEMINI_MODELS = [
   {
-    name: 'gemini-3.0-flash',
-    label: 'Gemini 3 Flash',
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${GEMINI_API_KEY}`
+    name: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
   },
   {
-    name: 'gemini-2.5-flash',
-    label: 'Gemini 2.5 Flash (free)',
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    name: 'gemini-1.5-flash',
+    label: 'Gemini 1.5 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`
   }
 ];
+
+function fallbackTriage(type, description = '', voice = '') {
+  const text = `${description} ${voice}`.toLowerCase();
+
+  const criticalHints = ['bleeding', 'unconscious', 'heart', 'stroke', 'trapped', 'collapse', 'fire', 'explosion'];
+  const urgentHints = ['injured', 'flood', 'riot', 'violence', 'shortage', 'urgent'];
+
+  if (criticalHints.some(h => text.includes(h))) {
+    return {
+      level: 1,
+      levelName: 'Critical',
+      color: 'red',
+      reasoning: 'Fallback triage detected high-risk keywords.',
+      volunteerTypes: ['medical', 'rapid-response'],
+      estimatedMinutes: 8,
+      modelUsed: 'Fallback rules'
+    };
+  }
+
+  if (type === 'Medical' || type === 'Conflict' || type === 'Disaster' || urgentHints.some(h => text.includes(h))) {
+    return {
+      level: 2,
+      levelName: 'Severe',
+      color: 'orange',
+      reasoning: 'Fallback triage marked incident as urgent.',
+      volunteerTypes: ['rapid-response'],
+      estimatedMinutes: 15,
+      modelUsed: 'Fallback rules'
+    };
+  }
+
+  if (type === 'Conflict') {
+    return {
+      level: 3,
+      levelName: 'Moderate',
+      color: 'yellow',
+      reasoning: 'Fallback triage marked this conflict report as moderate priority.',
+      volunteerTypes: ['coordination'],
+      estimatedMinutes: 25,
+      modelUsed: 'Fallback rules'
+    };
+  }
+
+  if (type === 'Resource') {
+    return {
+      level: 4,
+      levelName: 'Minor',
+      color: 'green',
+      reasoning: 'Fallback triage marked this as a resource need.',
+      volunteerTypes: ['logistics'],
+      estimatedMinutes: 35,
+      modelUsed: 'Fallback rules'
+    };
+  }
+
+  if (type === 'Hospitality') {
+    return {
+      level: 5,
+      levelName: 'Monitoring',
+      color: 'gray',
+      reasoning: 'Fallback triage marked this as monitoring / support information.',
+      volunteerTypes: ['community-support'],
+      estimatedMinutes: 45,
+      modelUsed: 'Fallback rules'
+    };
+  }
+
+  return {
+    level: 3,
+    levelName: 'Moderate',
+    color: 'yellow',
+    reasoning: 'Fallback triage assigned moderate priority.',
+    volunteerTypes: ['support'],
+    estimatedMinutes: 25,
+    modelUsed: 'Fallback rules'
+  };
+}
 
 // --- DOM ELEMENTS (lazily grabbed inside DOMContentLoaded) ---
 // ─── DOM ELEMENTS (safe: type=module scripts are deferred, DOM is ready) ────
@@ -526,9 +603,16 @@ submitBtn.addEventListener('click', async () => {
         });
         console.log('[ResQNet] Triage saved:', triage.levelName, 'via', triage.modelUsed);
       } else {
+        const fallback = fallbackTriage(selectedCategory, incidentDesc.value, voiceTranscript);
         await updateDoc(docRef, {
-          triageComplete: false,
-          triageReasoning: 'AI triage unavailable — all models failed'
+          triageLevel: fallback.level,
+          triageLevelName: fallback.levelName,
+          triageColor: fallback.color,
+          triageReasoning: fallback.reasoning,
+          volunteerTypes: fallback.volunteerTypes,
+          estimatedMinutes: fallback.estimatedMinutes,
+          triageComplete: true,
+          modelUsed: fallback.modelUsed
         });
       }
     });

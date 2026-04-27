@@ -1,5 +1,6 @@
-import { db, ensureAuth } from './firebaseConfig.js';
+import { db } from './firebaseConfig.js';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const resList = document.getElementById('resList');
 const addResBtn = document.getElementById('addResBtn');
@@ -8,10 +9,21 @@ const cancelRes = document.getElementById('cancelRes');
 const resForm = document.getElementById('resForm');
 const submitRes = document.getElementById('submitRes');
 
+async function ensureResourceSession() {
+  const auth = getAuth();
+  if (auth.currentUser) return;
+  await signInAnonymously(auth);
+}
+
 // --- INIT ---
 async function init() {
-  await ensureAuth();
-  listenToResources();
+  try {
+    await ensureResourceSession();
+    listenToResources();
+  } catch (err) {
+    console.error('Resource auth/init failed:', err);
+    resList.innerHTML = '<p style="color: #ff6b6b; padding: 2rem 0;">Unable to connect to resources service.</p>';
+  }
 }
 init();
 
@@ -32,6 +44,7 @@ resForm.addEventListener('submit', async (e) => {
   submitRes.textContent = 'Adding...';
 
   try {
+    await ensureResourceSession();
     await addDoc(collection(db, 'resources'), {
       name: document.getElementById('rName').value.trim(),
       type: document.getElementById('rType').value,

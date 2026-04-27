@@ -66,7 +66,6 @@
           <div class="coord-pill"><span id="hdrActiveNum">0</span> active</div>
           <div class="coord-pill"><span id="hdrDeployedNum">0</span> deployed</div>
           <div class="coord-pill"><span id="hdrResolvedNum">0</span> resolved today</div>
-          <button class="coord-new-btn" onclick="showPanel('report')">+ New SOS</button>
         </div>
       </header>
 
@@ -153,6 +152,13 @@
           <input type="checkbox" id="settingsNotif" style="width:18px; height:18px; accent-color:var(--accent-red);" />
         </div>
         <button id="saveSettingsBtn" class="btn-primary" style="padding:0.8rem 2rem; margin-bottom:2rem;">Save Changes</button>
+
+        <div style="margin-bottom: 2rem; border:1px solid var(--border); border-radius:10px; padding:1rem; background:var(--bg-surface);">
+          <h3 style="margin-bottom:0.4rem; font-size:1rem;">Triage Self-Test</h3>
+          <p style="margin-bottom:0.8rem; color:var(--text-dim); font-size:0.88rem;">Runs 5 deterministic checks (Levels 1-5) and shows pass/fail.</p>
+          <button id="runTriageTestBtn" class="btn-primary" style="padding:0.7rem 1rem; font-size:0.9rem;">Run 5-level test</button>
+          <div id="triageTestResult" style="margin-top:0.8rem; color:var(--text-dim); font-size:0.88rem;">Not run yet.</div>
+        </div>
         
         <hr style="border:none; border-top:1px solid var(--border); margin-bottom:2rem;" />
         
@@ -163,10 +169,13 @@
   </main>
 
   <aside class="coord-rightpanel">
-    <section class="coord-sos-panel">
-      <a href="reporter.html" class="coord-sos-circle" aria-label="Open SOS reporter">SOS</a>
-      <p class="coord-sos-subtitle">Emergency report</p>
-      <p class="coord-sos-hint">Hold button 2 seconds — GPS auto-captured</p>
+    <section class="coord-sos-panel" style="text-align:left;">
+      <h3 class="coord-section-label" style="margin-bottom: 10px;">OPERATIONS</h3>
+      <div style="display:grid; grid-template-columns: 1fr; gap: 8px;">
+        <button class="coord-new-btn" style="width:100%; text-align:center;" onclick="showPanel('report')">Open report form</button>
+        <button class="coord-pill" style="width:100%; text-align:center; cursor:pointer;" onclick="showPanel('volunteers')">View volunteers</button>
+        <button class="coord-pill" style="width:100%; text-align:center; cursor:pointer;" onclick="showPanel('history')">View history</button>
+      </div>
     </section>
 
     <section>
@@ -189,6 +198,17 @@
         <li><span class="coord-dot coord-dot-gray"></span>Level 5 — Monitoring</li>
       </ul>
     </section>
+
+    <section>
+      <h3 class="coord-section-label">AI TRIAGE QUEUE</h3>
+      <div class="coord-stat-box" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span id="statPendingTriage" class="coord-stat-val" style="font-size: 1.5rem; line-height: 1;">0</span>
+          <span class="coord-stat-label">Awaiting AI result</span>
+        </div>
+        <span class="coord-badge" style="border-color:#2a2d3a; color:#8e96a3;">live</span>
+      </div>
+    </section>
   </aside>
 </div>
 
@@ -202,6 +222,17 @@
 <div id="toast" class="toast" role="alert" aria-live="polite"></div>
 
 <script src="config.js"></script>
+<script>
+  window.__coordBooted = false;
+  setTimeout(() => {
+    if (window.__coordBooted) return;
+    const authErr = document.getElementById('authError');
+    if (authErr) {
+      authErr.textContent = 'Dashboard script failed to load (often 401 from local server). Use http://localhost:4173/coordinator.html or fix server config.';
+      authErr.style.display = 'block';
+    }
+  }, 1200);
+</script>
 <script type="module" src="coordinator.js"></script>
 </body>
 </html>

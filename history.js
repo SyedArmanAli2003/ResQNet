@@ -1,5 +1,6 @@
-import { db, ensureAuth } from './firebaseConfig.js';
+import { db } from './firebaseConfig.js';
 import { collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const historyList = document.getElementById('historyList');
 const filterTabs = document.querySelectorAll('.filter-tab');
@@ -9,10 +10,21 @@ const statResolved = document.getElementById('statResolved');
 
 let activeFilter = 'all';
 
+async function ensureHistorySession() {
+  const auth = getAuth();
+  if (auth.currentUser) return;
+  await signInAnonymously(auth);
+}
+
 // --- INIT ---
 async function init() {
-  await ensureAuth();
-  listenToHistory();
+  try {
+    await ensureHistorySession();
+    listenToHistory();
+  } catch (err) {
+    console.error('History auth/init failed:', err);
+    historyList.innerHTML = '<p style="color: #ff6b6b; padding: 2rem 0;">Unable to connect to history service.</p>';
+  }
 }
 init();
 
