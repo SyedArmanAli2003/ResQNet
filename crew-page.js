@@ -5,6 +5,7 @@ import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/1
 console.log('[Volunteers] crew-page.js loaded')
 
 let unsubscribeVolunteers = null
+let capturedCoords = null  // GPS coords for Haversine matching
 
 async function ensureVolunteerSession() {
   const auth = getAuth()
@@ -39,6 +40,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       (pos) => {
         const lat = pos.coords.latitude
         const lng = pos.coords.longitude
+        capturedCoords = { lat, lng }
+        console.log('[Volunteers] GPS captured:', lat, lng)
         const locField = document.getElementById('location')
         if (locField) {
           locField.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
@@ -87,6 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         phone,
         skill,
         location: location || 'Location not provided',
+        coordinates: capturedCoords || null,
         available,
         registeredAt: serverTimestamp()
       })

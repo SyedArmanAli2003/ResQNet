@@ -637,6 +637,78 @@
       });
     }
 
+    // ── Gemini AI Triage ──────────────────────────────────────────────────────
+    const GEMINI_API_KEY = typeof CONFIG !== 'undefined' ? CONFIG.GEMINI_API_KEY : '';
+    const GEMINI_MODELS = [
+      { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',
+        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}` },
+      { name: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',
+        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}` }
+    ];
+
+    function fallbackTriage(type, description = '', voice = '') {
+      const text = `${description} ${voice}`.toLowerCase();
+      const criticalHints = ['bleeding', 'unconscious', 'heart', 'stroke', 'trapped', 'collapse', 'fire', 'explosion'];
+      const urgentHints = ['injured', 'flood', 'riot', 'violence', 'shortage', 'urgent'];
+
+      if (criticalHints.some(h => text.includes(h))) {
+        return { level: 1, levelName: 'Critical', color: 'red', reasoning: 'Fallback triage detected high-risk keywords.',
+          volunteerTypes: ['medical', 'rapid-response'], estimatedMinutes: 8, modelUsed: 'Fallback rules' };
+      }
+      if (type === 'Medical' || type === 'Disaster' || urgentHints.some(h => text.includes(h))) {
+        return { level: 2, levelName: 'Severe', color: 'orange', reasoning: 'Fallback triage marked incident as urgent.',
+          volunteerTypes: ['rapid-response'], estimatedMinutes: 15, modelUsed: 'Fallback rules' };
+      }
+      if (type === 'Conflict') {
+        return { level: 3, levelName: 'Moderate', color: 'yellow', reasoning: 'Fallback: conflict report, moderate priority.',
+          volunteerTypes: ['coordination'], estimatedMinutes: 25, modelUsed: 'Fallback rules' };
+      }
+      if (type === 'Resource') {
+        return { level: 4, levelName: 'Minor', color: 'green', reasoning: 'Fallback: resource need.',
+          volunteerTypes: ['logistics'], estimatedMinutes: 35, modelUsed: 'Fallback rules' };
+      }
+      if (type === 'Hospitality') {
+        return { level: 5, levelName: 'Monitoring', color: 'gray', reasoning: 'Fallback: monitoring / support.',
+          volunteerTypes: ['community-support'], estimatedMinutes: 45, modelUsed: 'Fallback rules' };
+      }
+      return { level: 3, levelName: 'Moderate', color: 'yellow', reasoning: 'Fallback: moderate priority.',
+        volunteerTypes: ['support'], estimatedMinutes: 25, modelUsed: 'Fallback rules' };
+    }
+
+    async function callGeminiWithFallback(incidentData) {
+      const prompt = `You are an emergency triage AI.\nAnalyze this crisis and return ONLY valid JSON.\nNo explanation, no markdown, no backticks.\n\nType: ${incidentData.type}\nDescription: ${incidentData.description || 'none'}\nVoice: ${incidentData.voiceTranscript || 'none'}\nLocation: ${incidentData.location}\n\nReturn exactly this shape:\n{"level": 1, "levelName": "Critical", "color": "red", "reasoning": "one sentence max", "volunteerTypes": ["type1"], "estimatedMinutes": 10}\n\nLevel guide:\n1 = Critical (red)\n2 = Severe (orange)\n3 = Moderate (yellow)\n4 = Minor (green)\n5 = Monitoring (gray)`;
+
+      const body = JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
+      });
+
+      for (const model of GEMINI_MODELS) {
+        try {
+          console.log(`[Gemini] Trying ${model.label}...`);
+          const response = await fetch(model.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          const data = await response.json();
+          if (data.error) {
+            console.warn(`[Gemini] ${model.label} error (${data.error.code}): ${data.error.message}`);
+            if ([429, 403, 404].includes(data.error.code) || data.error.message?.includes('billing') || data.error.message?.includes('quota')) continue;
+            return null;
+          }
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) { console.warn(`[Gemini] ${model.label} returned empty`); continue; }
+          const clean = text.replace(/```json|```/g, '').trim();
+          const result = JSON.parse(clean);
+          result.modelUsed = model.label;
+          console.log(`[Gemini] Success with ${model.label}:`, result);
+          return result;
+        } catch (err) {
+          console.warn(`[Gemini] ${model.label} error:`, err.message);
+          continue;
+        }
+      }
+      console.error('[Gemini] All models failed');
+      return null;
+    }
+
     if (submitBtn) {
       submitBtn.addEventListener('click', async () => {
         if (!selectedCategory) {
@@ -651,7 +723,8 @@
           const userProfile = JSON.parse(sessionStorage.getItem('userProfile') || 'null');
           const safeLocation = currentAddress || (currentCoords ? formatCoords(currentCoords.lat, currentCoords.lng) : 'Unknown location');
 
-          await addDoc(collection(db, 'incidents'), {
+          console.log('[Submit] Step 1: Writing incident to Firestore...');
+          const docRef = await addDoc(collection(db, 'incidents'), {
             type: selectedCategory,
             description: incidentDesc.value,
             location: safeLocation,
@@ -664,9 +737,37 @@
             reporterName: userProfile?.fullName || auth.currentUser?.displayName || 'Anonymous user',
             reporterPhone: userProfile?.phone || ''
           });
+          console.log(`[Submit] Step 2: Firestore write complete, doc ID: ${docRef.id}`);
 
+          // Show success immediately — triage runs in background
           if (categoryModal) categoryModal.style.display = 'none';
           if (successModal) successModal.style.display = 'flex';
+
+          // Step 3: Trigger AI triage AFTER addDoc completes (no race condition)
+          console.log('[Submit] Step 3: Starting Gemini triage...');
+          callGeminiWithFallback({
+            type: selectedCategory,
+            description: incidentDesc.value,
+            voiceTranscript,
+            location: safeLocation
+          }).then(async (triage) => {
+            const triageResult = triage || fallbackTriage(selectedCategory, incidentDesc.value, voiceTranscript);
+            console.log(`[Submit] Step 4: Triage complete — ${triageResult.levelName} via ${triageResult.modelUsed}`);
+            await updateDoc(doc(db, 'incidents', docRef.id), {
+              triageLevel: triageResult.level,
+              triageLevelName: triageResult.levelName,
+              triageColor: triageResult.color,
+              triageReasoning: triageResult.reasoning,
+              volunteerTypes: triageResult.volunteerTypes,
+              estimatedMinutes: triageResult.estimatedMinutes,
+              triageComplete: true,
+              modelUsed: triageResult.modelUsed || 'unknown'
+            });
+            console.log(`[Submit] Step 5: Triage saved to Firestore`);
+          }).catch(err => {
+            console.error('[Submit] Triage update failed:', err);
+          });
+
         } catch (err) {
           console.error('[Submit] failed:', err);
           alert('Failed to send report. Please try again.');

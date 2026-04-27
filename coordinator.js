@@ -132,6 +132,7 @@ function startListening() {
     let deployedCount = 0;
     let resolvedTodayCount = 0;
     let pendingTriageCount = 0;
+    let responseTimes = [];  // Step 4: real response time tracking
     const incidents = [];
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -161,8 +162,17 @@ function startListening() {
       }
 
       if (data.status === 'resolved') {
-        const ts = data.timestamp?.toDate?.();
-        if (ts && ts >= startOfToday) resolvedTodayCount++;
+        // Step 3: Use resolvedAt (not creation timestamp) for 'resolved today'
+        const resolvedTs = data.resolvedAt?.toDate?.() || data.timestamp?.toDate?.();
+        if (resolvedTs && resolvedTs >= startOfToday) resolvedTodayCount++;
+        // Step 4: Track real response times
+        if (data.assignedAt && data.resolvedAt) {
+          const assignMs = data.assignedAt.toDate?.()?.getTime?.() || 0;
+          const resolveMs = data.resolvedAt.toDate?.()?.getTime?.() || 0;
+          if (assignMs > 0 && resolveMs > assignMs) {
+            responseTimes.push((resolveMs - assignMs) / 60000);
+          }
+        }
       } else {
         activeCount++;
         if (data.assignedVolunteerId) deployedCount++;
@@ -173,7 +183,7 @@ function startListening() {
     });
 
     latestIncidents = incidents;
-    updateStats(activeCount, deployedCount, resolvedTodayCount, pendingTriageCount);
+    updateStats(activeCount, deployedCount, resolvedTodayCount, pendingTriageCount, responseTimes);
     renderList(incidents);
 
   }, (err) => {
@@ -432,8 +442,7 @@ function renderList(incidents) {
       </div>
       <div class="coord-card-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="coord-chip-row">
-          <span class="coord-chip">Paramedic</span>
-          <span class="coord-chip">Rapid response</span>
+          ${(inc.volunteerTypes || getExpectedSkills(inc.type)).map(t => `<span class="coord-chip">${t}</span>`).join('')}
           <span class="coord-chip">${isResolved ? '✅ Resolved' : '🔴 Active'}</span>
           ${assignedLabel}
         </div>
@@ -504,7 +513,7 @@ function renderList(incidents) {
 }
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
-function updateStats(activeCount, deployedCount, resolvedCount, pendingTriageCount = 0) {
+function updateStats(activeCount, deployedCount, resolvedCount, pendingTriageCount = 0, responseTimes = []) {
   hdrActiveNum.textContent    = activeCount;
   hdrDeployedNum.textContent  = deployedCount;
   hdrResolvedNum.textContent  = resolvedCount;
@@ -512,8 +521,13 @@ function updateStats(activeCount, deployedCount, resolvedCount, pendingTriageCou
   statDeployedNum.textContent = deployedCount;
   statResolvedNum.textContent = resolvedCount;
   if (statPendingTriage) statPendingTriage.textContent = pendingTriageCount;
-  const avg = activeCount > 0 ? Math.max(4, 12 - Math.min(activeCount, 8)) : 0;
-  statAvgResponse.textContent = avg > 0 ? `${avg}m` : '--';
+  // Step 4: Real avg response time from dispatch → resolve timestamps
+  if (responseTimes.length > 0) {
+    const avg = Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length);
+    statAvgResponse.textContent = avg > 0 ? `${avg}m` : '--';
+  } else {
+    statAvgResponse.textContent = activeCount > 0 ? 'N/A' : '--';
+  }
 }
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
@@ -1171,9 +1185,13 @@ function renderAreaRanking(incidents) {
   if (!container) return;
   container.innerHTML = '';
 
+  const BAD_LOCS = ['unknown', 'location unavailable', 'unknown location', 'capturing location...', 'locating...', 'capturing gps...', 'gps permission denied.'];
+
   const areaCounts = {};
   incidents.forEach(i => {
-    let loc = i.location || 'Unknown';
+    let loc = i.location || '';
+    // Skip placeholder/bad locations
+    if (!loc || BAD_LOCS.includes(loc.toLowerCase().trim())) return;
     // Simplify long addresses to last 2-3 meaningful parts
     const parts = loc.split(',').map(s => s.trim()).filter(Boolean);
     loc = parts.length > 2 ? parts.slice(-3).join(', ') : loc;
@@ -1247,13 +1265,13 @@ function renderInsightsMap(incidents) {
       weight: 2
     });
     marker.bindPopup(`
-      <div style="font-family:Inter,sans-serif;">
+      <div style="font-family:Inter,sans-serif; background:#1a1c2e; color:#f0f0f0; padding:8px; border-radius:6px; min-width:160px;">
         <strong>${inc.type || 'Incident'}</strong><br>
         <span style="color:${color};">Level ${lv}</span><br>
         ${inc.location ? `📍 ${inc.location.substring(0, 60)}` : ''}<br>
         ${inc.description ? `"${inc.description.substring(0, 80)}"` : ''}
       </div>
-    `);
+    `, { className: 'dark-popup' });
     marker.addTo(insightsMap);
     insightsMapMarkers.push(marker);
   });
