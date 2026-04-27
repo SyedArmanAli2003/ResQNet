@@ -22,6 +22,13 @@
   --color-minor: #4CAF50;
   --color-monitor: #757575;
 
+  --blue: #3498db;
+  --teal: #1abc9c;
+  --orange: #F57C00;
+  --yellow: #FBC02D;
+  --green: #4CAF50;
+  --accent-green: #4CAF50;
+
   --border: rgba(255, 255, 255, 0.08);
   --radius: 12px;
   --font-sans: 'Inter', system-ui, sans-serif;
