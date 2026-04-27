@@ -1,7 +1,22 @@
 import { db, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from './firebaseConfig.js';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 window.__coordBooted = true;
+
+// ── Timeline Helper ───────────────────────────────────────────────────────────
+async function addTimelineEntry(incidentId, action, actor, details = '') {
+  try {
+    await addDoc(collection(db, 'incidents', incidentId, 'timeline'), {
+      action,
+      actor,
+      details,
+      timestamp: serverTimestamp()
+    });
+    console.log(`[Timeline] ${action} by ${actor} on ${incidentId}`);
+  } catch (err) {
+    console.warn('[Timeline] Failed to add entry:', err.message);
+  }
+}
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const authModal     = document.getElementById('authModal');
@@ -156,6 +171,9 @@ function startListening() {
           triageReasoning: fallback.reasoning,
           triageComplete: true,
           modelUsed: 'Coordinator auto-fallback'
+        }).then(() => {
+          addTimelineEntry(docSnap.id, 'triaged', 'system',
+            `Auto-fallback triage → Level ${fallback.level} (${fallback.levelName}): ${fallback.reasoning}`);
         }).catch(() => {
           // Ignore transient write errors; next snapshot will retry if still stale.
         });
@@ -321,6 +339,7 @@ function getVolunteerMatches(incident, limit = 3) {
 async function dispatchVolunteer(incidentId, volunteerId) {
   const volunteer = volunteerPool.find(v => v.id === volunteerId);
   if (!volunteer) throw new Error('Volunteer not found');
+  const coordinatorEmail = auth?.currentUser?.email || 'coordinator';
 
   await Promise.all([
     updateDoc(doc(db, 'incidents', incidentId), {
@@ -334,7 +353,9 @@ async function dispatchVolunteer(incidentId, volunteerId) {
       available: false,
       activeIncidentId: incidentId,
       lastAssignedAt: serverTimestamp()
-    })
+    }),
+    addTimelineEntry(incidentId, 'dispatched', coordinatorEmail,
+      `Dispatched ${volunteer.name || 'Volunteer'} (${volunteer.skill || 'General'}) to incident`)
   ]);
 }
 
@@ -448,11 +469,13 @@ function renderList(incidents) {
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           ${modelBadge}
+          <button class="coord-resolve-btn timeline-btn" data-id="${inc.id}" style="background:transparent; border:1px solid rgba(255,255,255,0.15); color:#8e96a3; font-size:11px; padding:4px 10px;">📋 Timeline</button>
           ${!isResolved
             ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>`
             : ''}
         </div>
       </div>
+      <div class="timeline-container" id="timeline-${inc.id}" style="display:none; padding:12px 16px; border-top:1px solid rgba(255,255,255,0.06);"></div>
     `;
 
     incidentsList.appendChild(card);
@@ -466,11 +489,13 @@ function renderList(incidents) {
       btn.textContent = 'Resolving…';
       try {
         const target = latestIncidents.find(i => i.id === id);
+        const coordinatorEmail = auth?.currentUser?.email || 'coordinator';
         const updates = [
           updateDoc(doc(db, 'incidents', id), {
             status: 'resolved',
             resolvedAt: serverTimestamp()
-          })
+          }),
+          addTimelineEntry(id, 'resolved', coordinatorEmail, 'Incident marked as resolved by coordinator')
         ];
 
         if (target?.assignedVolunteerId) {
@@ -507,6 +532,79 @@ function renderList(incidents) {
         btn.disabled = false;
         btn.textContent = oldText;
         showToast('Dispatch failed. Try again.');
+      }
+    });
+  });
+
+  // Attach timeline toggle listeners
+  document.querySelectorAll('.timeline-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const container = document.getElementById(`timeline-${id}`);
+      if (!container) return;
+
+      // Toggle visibility
+      if (container.style.display !== 'none') {
+        container.style.display = 'none';
+        btn.style.borderColor = 'rgba(255,255,255,0.15)';
+        btn.style.color = '#8e96a3';
+        return;
+      }
+
+      container.style.display = 'block';
+      btn.style.borderColor = '#3498db';
+      btn.style.color = '#3498db';
+      container.innerHTML = '<p style="font-size:12px;color:#8e96a3;">Loading timeline...</p>';
+
+      try {
+        const timelineRef = collection(db, 'incidents', id, 'timeline');
+        const timelineQ = query(timelineRef, orderBy('timestamp', 'asc'));
+        const snapshot = await getDocs(timelineQ);
+
+        if (snapshot.empty) {
+          container.innerHTML = '<p style="font-size:12px;color:#8e96a3;">No timeline events yet.</p>';
+          return;
+        }
+
+        const actionIcons = {
+          created: '🆕', triaged: '🤖', dispatched: '🚀', resolved: '✅',
+          updated: '📝', escalated: '⚠️'
+        };
+        const actionColors = {
+          created: '#3498db', triaged: '#9b59b6', dispatched: '#e67e22',
+          resolved: '#2ecc71', updated: '#95a5a6', escalated: '#e74c3c'
+        };
+
+        let html = '<div style="position:relative;padding-left:24px;">';
+        html += '<div style="position:absolute;left:8px;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.08);"></div>';
+
+        snapshot.forEach(docSnap => {
+          const entry = docSnap.data();
+          const ts = entry.timestamp?.toDate?.();
+          const timeStr = ts ? ts.toLocaleString('en-US', {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          }) : '';
+          const icon = actionIcons[entry.action] || '📌';
+          const color = actionColors[entry.action] || '#95a5a6';
+
+          html += `
+            <div style="position:relative;margin-bottom:16px;">
+              <div style="position:absolute;left:-20px;top:2px;width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #0d1520;z-index:1;"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                <span style="font-size:12px;font-weight:600;color:${color};">${icon} ${(entry.action || 'event').charAt(0).toUpperCase() + (entry.action || 'event').slice(1)}</span>
+                <span style="font-size:10px;color:#6b7280;">${timeStr}</span>
+              </div>
+              <div style="font-size:11px;color:#c0c4cc;line-height:1.4;">${entry.details || ''}</div>
+              <div style="font-size:10px;color:#6b7280;margin-top:2px;">by ${entry.actor || 'unknown'}</div>
+            </div>
+          `;
+        });
+
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (err) {
+        console.error('[Timeline] Load failed:', err);
+        container.innerHTML = '<p style="font-size:12px;color:#F09595;">Failed to load timeline.</p>';
       }
     });
   });
@@ -1284,4 +1382,80 @@ function renderInsightsMap(incidents) {
 
   // Force tile redraw (needed when map was hidden)
   setTimeout(() => insightsMap.invalidateSize(), 200);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── CSV EXPORT ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+function escapeCSV(val) {
+  if (val == null) return '';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function exportIncidentsCSV() {
+  const incidents = latestIncidents;
+  if (!incidents || incidents.length === 0) {
+    showToast('No incidents to export.');
+    return;
+  }
+
+  const headers = ['Timestamp', 'Type', 'Location', 'Triage Level', 'Severity', 'Assigned To', 'Status', 'Response Time (min)', 'Description', 'Model Used', 'Reporter'];
+  const rows = [headers.join(',')];
+
+  incidents.forEach(inc => {
+    const ts = inc.timestamp?.toDate?.();
+    const tsStr = ts ? ts.toISOString() : '';
+    const level = inc.triageLevel || '';
+    const severity = inc.triageLevelName || '';
+    const assignedTo = inc.assignedVolunteerName || '';
+    const status = inc.status || 'pending';
+
+    let responseMin = '';
+    if (inc.assignedAt && inc.resolvedAt) {
+      const assignMs = inc.assignedAt.toDate?.()?.getTime?.() || 0;
+      const resolveMs = inc.resolvedAt.toDate?.()?.getTime?.() || 0;
+      if (assignMs > 0 && resolveMs > assignMs) {
+        responseMin = Math.round((resolveMs - assignMs) / 60000);
+      }
+    }
+
+    const description = inc.description || inc.voiceTranscript || '';
+    const model = inc.modelUsed || '';
+    const reporter = inc.reporterName || '';
+
+    rows.push([
+      escapeCSV(tsStr),
+      escapeCSV(inc.type),
+      escapeCSV(inc.location),
+      escapeCSV(level),
+      escapeCSV(severity),
+      escapeCSV(assignedTo),
+      escapeCSV(status),
+      escapeCSV(responseMin),
+      escapeCSV(description),
+      escapeCSV(model),
+      escapeCSV(reporter)
+    ].join(','));
+  });
+
+  const csvContent = rows.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const dateStr = new Date().toISOString().split('T')[0];
+  link.download = `ResQNet_Incidents_${dateStr}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${incidents.length} incidents to CSV.`);
+}
+
+const btnExportCSV = document.getElementById('btnExportCSV');
+if (btnExportCSV) {
+  btnExportCSV.addEventListener('click', exportIncidentsCSV);
 }

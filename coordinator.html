@@ -170,7 +170,12 @@
 
     <!-- PANEL: INSIGHTS -->
     <div id="panel-insights" class="panel" style="display: none; padding: 2rem;">
-      <h1 class="coord-title" style="margin-bottom: 2rem;">Community Insights</h1>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
+        <h1 class="coord-title" style="margin-bottom:0;">Community Insights</h1>
+        <button id="btnExportCSV" class="coord-resolve-btn" style="background:#1a1c2e; border:1px solid rgba(255,255,255,0.15); color:#3498db; font-size:12px; padding:8px 16px; border-radius:8px; cursor:pointer;">
+          📥 Download CSV Report
+        </button>
+      </div>
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
         <!-- Type Breakdown -->
         <div style="background:var(--bg-deep); padding:1.5rem; border-radius:12px; border:1px solid var(--border);">

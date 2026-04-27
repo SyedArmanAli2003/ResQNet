@@ -739,6 +739,14 @@
           });
           console.log(`[Submit] Step 2: Firestore write complete, doc ID: ${docRef.id}`);
 
+          // Timeline: record incident creation
+          addDoc(collection(db, 'incidents', docRef.id, 'timeline'), {
+            action: 'created',
+            actor: userProfile?.fullName || auth.currentUser?.email || 'reporter',
+            details: `${selectedCategory} incident reported${safeLocation !== 'Unknown location' ? ' at ' + safeLocation.substring(0, 50) : ''}`,
+            timestamp: serverTimestamp()
+          }).catch(() => {});
+
           // Show success immediately — triage runs in background
           if (categoryModal) categoryModal.style.display = 'none';
           if (successModal) successModal.style.display = 'flex';
@@ -764,6 +772,14 @@
               modelUsed: triageResult.modelUsed || 'unknown'
             });
             console.log(`[Submit] Step 5: Triage saved to Firestore`);
+
+            // Timeline: record triage completion
+            addDoc(collection(db, 'incidents', docRef.id, 'timeline'), {
+              action: 'triaged',
+              actor: triageResult.modelUsed || 'system',
+              details: `Triage → Level ${triageResult.level} (${triageResult.levelName}): ${triageResult.reasoning}`,
+              timestamp: serverTimestamp()
+            }).catch(() => {});
           }).catch(err => {
             console.error('[Submit] Triage update failed:', err);
           });
