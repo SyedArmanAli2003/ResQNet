@@ -176,16 +176,16 @@
               </select>
             </div>
             <div class="input-group">
-              <label for="volLoc">Location <small id="locStatus" style="color:var(--text-dim)">(capturing...)</small></label>
-              <input type="text" id="volLoc" class="form-input" placeholder="Capturing GPS..." required />
+              <label for="location">Location <small id="locStatus" style="color:var(--text-dim)">(capturing...)</small></label>
+              <input type="text" id="location" class="form-input" placeholder="Capturing GPS..." required />
             </div>
           </div>
           <div style="display:flex; justify-content: space-between; align-items: center;">
             <div class="input-group" style="flex-direction:row; align-items:center; gap:0.8rem;">
-              <label for="volAvail" style="color:var(--text-main); font-weight:500;">Currently Available?</label>
-              <input type="checkbox" id="volAvail" checked style="width:18px; height:18px; accent-color:var(--accent-red);" />
+              <label for="volAvailable" style="color:var(--text-main); font-weight:500;">Currently Available?</label>
+              <input type="checkbox" id="volAvailable" checked style="width:18px; height:18px; accent-color:var(--accent-red);" />
             </div>
-            <button type="submit" id="submitVol" class="btn-primary" style="padding: 0.8rem 2rem;">Register</button>
+            <button type="button" id="registerBtn" class="btn-primary" style="padding: 0.8rem 2rem;">Register</button>
           </div>
         </form>
       </section>
@@ -193,13 +193,13 @@
       <section>
         <h2 style="margin-bottom: 1rem;">Active Volunteers</h2>
         <div class="filter-row" id="volFilters">
-          <button class="filter-btn active" data-filter="All">All</button>
-          <button class="filter-btn" data-filter="Medical">Medical</button>
-          <button class="filter-btn" data-filter="Rescue">Rescue</button>
-          <button class="filter-btn" data-filter="Supply">Supply</button>
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="medical">Medical</button>
+          <button class="filter-btn" data-filter="rescue">Rescue</button>
+          <button class="filter-btn" data-filter="supply">Supply</button>
         </div>
         
-        <div id="volList" class="vol-list">
+        <div id="volunteersList" class="vol-list">
           <p style="color: var(--text-dim); padding: 2rem 0;">Loading volunteers...</p>
         </div>
       </section>
@@ -209,6 +209,6 @@
   <div id="toast" class="toast"></div>
 
   <script src="config.js"></script>
-  <script type="module" src="volunteers.js"></script>
+  <script type="module" src="crew-page.js"></script>
 </body>
 </html>
