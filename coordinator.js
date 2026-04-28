@@ -3,6 +3,49 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverT
 
 window.__coordBooted = true;
 
+// ── Gemini Integration ────────────────────────────────────────────────────────
+const GEMINI_API_KEY = typeof CONFIG !== 'undefined' ? CONFIG.GEMINI_API_KEY : '';
+const GEMINI_MODELS = [
+  { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}` },
+  { name: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}` }
+];
+
+async function callGeminiWithFallback(incidentData) {
+  const prompt = `You are an emergency triage AI.\nAnalyze this crisis and return ONLY valid JSON.\nNo explanation, no markdown, no backticks.\n\nType: ${incidentData.type}\nDescription: ${incidentData.description || 'none'}\nVoice: ${incidentData.voiceTranscript || 'none'}\nLocation: ${incidentData.location}\n\nReturn exactly this shape:\n{"level": 1, "levelName": "Critical", "color": "red", "reasoning": "one sentence max", "volunteerTypes": ["type1"], "estimatedMinutes": 10}\n\nLevel guide:\n1 = Critical (red)\n2 = Severe (orange)\n3 = Moderate (yellow)\n4 = Minor (green)\n5 = Monitoring (gray)`;
+
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
+  });
+
+  for (const model of GEMINI_MODELS) {
+    try {
+      console.log(`[Gemini] Trying ${model.label}...`);
+      const response = await fetch(model.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const data = await response.json();
+      if (data.error) {
+        console.warn(`[Gemini] ${model.label} error (${data.error.code}): ${data.error.message}`);
+        if ([429, 403, 404].includes(data.error.code) || data.error.message?.includes('billing') || data.error.message?.includes('quota')) continue;
+        return null;
+      }
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) { console.warn(`[Gemini] ${model.label} returned empty`); continue; }
+      const clean = text.replace(/```json|```/g, '').trim();
+      const result = JSON.parse(clean);
+      result.modelUsed = model.label;
+      console.log(`[Gemini] Success with ${model.label}:`, result);
+      return result;
+    } catch (err) {
+      console.warn(`[Gemini] ${model.label} error:`, err.message);
+      continue;
+    }
+  }
+  console.error('[Gemini] All models failed');
+  return null;
+}
+
 // ── Timeline Helper ───────────────────────────────────────────────────────────
 async function addTimelineEntry(incidentId, action, actor, details = '') {
   try {
@@ -849,7 +892,8 @@ if (panelSubmitBtn) {
     panelSubmitBtn.textContent = 'Submitting...';
     
     try {
-      const fallback = fallbackTriageForType(panelSelectedCategory, desc);
+      const aiResult = await callGeminiWithFallback({ type: panelSelectedCategory, description: desc, voiceTranscript: '', location: loc });
+      const triage = aiResult || fallbackTriageForType(panelSelectedCategory, desc);
 
       const docRef = await addDoc(collection(db, 'incidents'), {
         type: panelSelectedCategory,
@@ -857,11 +901,11 @@ if (panelSubmitBtn) {
         location: loc,
         timestamp: serverTimestamp(),
         status: 'pending',
-        triageLevel: fallback.level,
-        triageLevelName: fallback.levelName,
-        triageReasoning: fallback.reasoning,
+        triageLevel: triage.level,
+        triageLevelName: triage.levelName || triage.label || 'Triage Result',
+        triageReasoning: triage.reasoning,
         triageComplete: true,
-        modelUsed: 'Coordinator rule-based',
+        modelUsed: triage.modelUsed || 'Coordinator fallback',
         reporterName: auth.currentUser?.email || 'Coordinator'
       });
       addTimelineEntry(docRef.id, 'created', auth.currentUser?.email || 'Coordinator', `Incident reported directly via dashboard.`);
@@ -997,9 +1041,10 @@ const runTriageTestBtn = document.getElementById('runTriageTestBtn');
 const triageTestResult = document.getElementById('triageTestResult');
 
 if (runTriageTestBtn && triageTestResult) {
-  runTriageTestBtn.addEventListener('click', () => {
+  runTriageTestBtn.addEventListener('click', async () => {
     runTriageTestBtn.disabled = true;
-    runTriageTestBtn.textContent = 'Running...';
+    runTriageTestBtn.textContent = 'Running AI Test...';
+    triageTestResult.innerHTML = '<div style="color:#8e96a3; font-size:0.9rem;">Connecting to Gemini...</div>';
 
     const cases = [
       {
@@ -1034,16 +1079,28 @@ if (runTriageTestBtn && triageTestResult) {
       }
     ];
 
-    const rows = cases.map((t) => {
-      const got = fallbackTriageForType(t.type, t.description).level;
+    const rows = [];
+    for (const t of cases) {
+      let aiResult = await callGeminiWithFallback({ type: t.type, description: t.description, voiceTranscript: '', location: 'Test' });
+      let got, usedModel;
+      
+      if (aiResult) {
+        got = aiResult.level;
+        usedModel = aiResult.modelUsed || 'AI';
+      } else {
+        got = fallbackTriageForType(t.type, t.description).level;
+        usedModel = 'Fallback';
+      }
+      
       const pass = got === t.expected;
-      return {
+      rows.push({
         label: t.name,
         expected: t.expected,
         got,
-        pass
-      };
-    });
+        pass,
+        usedModel
+      });
+    }
 
     const passCount = rows.filter(r => r.pass).length;
     const allPassed = passCount === rows.length;
@@ -1052,13 +1109,13 @@ if (runTriageTestBtn && triageTestResult) {
       `<div style="margin-bottom:0.4rem; font-weight:600; color:${allPassed ? '#4CAF50' : '#F57C00'};">${allPassed ? 'PASS' : 'PARTIAL'} — ${passCount}/${rows.length} checks</div>`,
       ...rows.map(r => (
         `<div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:2px; color:${r.pass ? '#9FE1CB' : '#ffb4a9'};">` +
-          `<span>${r.pass ? 'PASS' : 'FAIL'} ${r.label}</span>` +
+          `<span>${r.pass ? 'PASS' : 'FAIL'} ${r.label} <span style="font-size:0.7em;color:#666;">(${r.usedModel})</span></span>` +
           `<span>expected L${r.expected}, got L${r.got}</span>` +
         `</div>`
       ))
     ].join('');
 
-    showToast(allPassed ? 'Triage self-test passed (5/5).' : `Triage self-test: ${passCount}/5 passed.`);
+    showToast(allPassed ? 'Triage AI self-test passed (5/5).' : `Triage self-test: ${passCount}/5 passed.`);
 
     runTriageTestBtn.disabled = false;
     runTriageTestBtn.textContent = 'Run 5-level test';
@@ -1507,15 +1564,70 @@ const opsOpenReportBtn = document.getElementById('opsOpenReportBtn');
 if (opsOpenReportBtn) opsOpenReportBtn.addEventListener('click', () => showPanel('report'));
 
 const opsAutoDispatchBtn = document.getElementById('opsAutoDispatchBtn');
-if (opsAutoDispatchBtn) opsAutoDispatchBtn.addEventListener('click', () => {
-  opsAutoDispatchBtn.disabled = true;
-  opsAutoDispatchBtn.textContent = 'Dispatching...';
-  setTimeout(() => {
-    showToast('Auto-dispatch initiated. AI matching in progress.');
-    opsAutoDispatchBtn.disabled = false;
-    opsAutoDispatchBtn.textContent = 'Auto-dispatch top matches';
-  }, 1000);
-});
+if (opsAutoDispatchBtn) {
+  opsAutoDispatchBtn.addEventListener('click', async () => {
+    const pending = latestIncidents.filter(i => i.dispatchStatus !== 'assigned' && i.status !== 'resolved');
+    const available = volunteerPool.filter(v => v.available);
+
+    if (pending.length === 0) {
+      showToast('No pending incidents to dispatch.');
+      return;
+    }
+    if (available.length === 0) {
+      showToast('No available volunteers to dispatch.');
+      return;
+    }
+
+    opsAutoDispatchBtn.disabled = true;
+    opsAutoDispatchBtn.textContent = 'AI Dispatching...';
+    showToast('Consulting Gemini for optimal matching...');
+
+    const incidentListStr = pending.map(i => `[Inc ${i.id}] Type: ${i.type}, Severity: ${i.severity}, Desc: ${i.description || 'none'}`).join('\n');
+    const volunteerListStr = available.map(v => `[Vol ${v.id}] Name: ${v.name}, Skill: ${v.skill}`).join('\n');
+
+    const prompt = `You are a crisis response dispatcher.\nMatch the best available volunteers to pending incidents.\n\nPENDING INCIDENTS:\n${incidentListStr}\n\nAVAILABLE VOLUNTEERS:\n${volunteerListStr}\n\nReturn ONLY a JSON array of matches: [{"incidentId": "inc_id", "volunteerId": "vol_id"}].\nNo explanation. Only valid JSON array.`;
+
+    try {
+      const body = JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 500 }
+      });
+
+      let matches = [];
+      for (const model of GEMINI_MODELS) {
+        try {
+          const response = await fetch(model.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const clean = text.replace(/```json|```/g, '').trim();
+            matches = JSON.parse(clean);
+            break;
+          }
+        } catch (err) { console.warn(`Auto-dispatch failed for ${model.label}`, err); }
+      }
+
+      if (matches.length === 0) {
+        showToast('AI could not determine matches. Please dispatch manually.');
+      } else {
+        let count = 0;
+        for (const match of matches) {
+          try {
+            await dispatchVolunteer(match.incidentId, match.volunteerId);
+            count++;
+          } catch (err) { console.warn('Match failed execution:', err); }
+        }
+        showToast(`AI Auto-dispatch complete: ${count} assignments made.`);
+      }
+    } catch (err) {
+      console.error('Auto-dispatch error:', err);
+      showToast('AI Dispatch error. See console.');
+    } finally {
+      opsAutoDispatchBtn.disabled = false;
+      opsAutoDispatchBtn.textContent = 'Auto-dispatch top matches';
+    }
+  });
+}
 
 const opsRunTriageBtn = document.getElementById('opsRunTriageBtn');
 const runTriageTestBtnInner = document.getElementById('runTriageTestBtn');
