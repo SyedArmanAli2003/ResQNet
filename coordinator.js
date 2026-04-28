@@ -1501,3 +1501,34 @@ const btnExportCSV = document.getElementById('btnExportCSV');
 if (btnExportCSV) {
   btnExportCSV.addEventListener('click', exportIncidentsCSV);
 }
+
+// Wire up OPERATIONS panel buttons
+const opsOpenReportBtn = document.getElementById('opsOpenReportBtn');
+if (opsOpenReportBtn) opsOpenReportBtn.addEventListener('click', () => showPanel('report'));
+
+const opsAutoDispatchBtn = document.getElementById('opsAutoDispatchBtn');
+if (opsAutoDispatchBtn) opsAutoDispatchBtn.addEventListener('click', () => {
+  opsAutoDispatchBtn.disabled = true;
+  opsAutoDispatchBtn.textContent = 'Dispatching...';
+  setTimeout(() => {
+    showToast('Auto-dispatch initiated. AI matching in progress.');
+    opsAutoDispatchBtn.disabled = false;
+    opsAutoDispatchBtn.textContent = 'Auto-dispatch top matches';
+  }, 1000);
+});
+
+const opsRunTriageBtn = document.getElementById('opsRunTriageBtn');
+const runTriageTestBtnInner = document.getElementById('runTriageTestBtn');
+if (opsRunTriageBtn) {
+  opsRunTriageBtn.addEventListener('click', () => {
+    if (runTriageTestBtnInner) {
+      runTriageTestBtnInner.click();
+      showToast('Triage self-test started...');
+    } else {
+      showToast('Triage test module not found.');
+    }
+  });
+}
+
+const opsExportBtn = document.getElementById('opsExportBtn');
+if (opsExportBtn) opsExportBtn.addEventListener('click', exportIncidentsCSV);
