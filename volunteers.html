@@ -203,6 +203,17 @@
           <p style="color: var(--text-dim); padding: 2rem 0;">Loading volunteers...</p>
         </div>
       </section>
+
+      <!-- ── MY ASSIGNED TASKS (shown only when logged-in volunteer) ── -->
+      <section id="myTasksSection" style="display:none; margin-top:3rem;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:1.5rem;">
+          <h2 style="font-size:1.3rem;">My Assigned Tasks</h2>
+          <span style="font-size:11px; padding:3px 10px; background:#0a1828; border:1px solid #185FA5; border-radius:999px; color:#B5D4F4; font-weight:600;">LIVE</span>
+        </div>
+        <div id="myTasks">
+          <p style="color:#555; padding:1rem 0;">Loading tasks...</p>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -211,8 +222,11 @@
   <script src="config.js"></script>
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-    import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import {
+      getFirestore, collection, addDoc, onSnapshot, serverTimestamp,
+      where, orderBy, updateDoc, doc, query, getDocs
+    } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
     const firebaseConfig = {
       apiKey: 'AIzaSyAgSylHSHd1KRN4SYNqG30cQkrGRfY2CCI',
@@ -229,12 +243,228 @@
     const auth = getAuth(app);
 
     let unsubscribeVolunteers = null;
+    let unsubscribeTasks = null;
     let capturedCoords = null;
 
     async function ensureVolunteerSession() {
       if (auth.currentUser) return;
       await signInAnonymously(auth);
     }
+
+    // ── HELPER: relative time ─────────────────────────────────────────────
+    function timeAgo(ts) {
+      if (!ts) return 'just now';
+      const date = ts.toDate ? ts.toDate() : new Date(ts);
+      const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (sec < 60)   return `${sec}s ago`;
+      if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+      if (sec < 86400) return `${Math.floor(sec / 3600)}hr ago`;
+      return `${Math.floor(sec / 86400)}d ago`;
+    }
+
+    // ── HELPER: triage level → color ──────────────────────────────────────
+    function getLevelColor(level) {
+      const map = { 1: '#A32D2D', 2: '#854F0B', 3: '#EF9F27', 4: '#3B6D11', 5: '#555555' };
+      return map[level] || '#2a2d3a';
+    }
+
+    // ── HELPER: status label ──────────────────────────────────────────────
+    function getStatusLabel(status) {
+      const labels = {
+        en_route:    'Volunteer is on the way',
+        arrived:     'Volunteer has arrived at scene',
+        unavailable: 'Volunteer unable to respond',
+        resolved:    'Issue resolved on site',
+        needs_help:  'Volunteer needs backup'
+      };
+      return labels[status] || status;
+    }
+
+    // ── ACTION BUTTONS per status ─────────────────────────────────────────
+    function getVolunteerActions(incidentId, currentStatus) {
+      if (!currentStatus || currentStatus === 'assigned') {
+        return `
+          <button onclick="window.updateVolunteerStatus('${incidentId}', 'en_route')"
+            style="background:#185FA5;border:none;border-radius:6px;padding:7px 14px;
+            font-size:11px;color:#B5D4F4;cursor:pointer;">
+            🚗 I'm on my way
+          </button>
+          <button onclick="window.updateVolunteerStatus('${incidentId}', 'unavailable')"
+            style="background:#1a0808;border:1px solid #3d1a1a;border-radius:6px;
+            padding:7px 14px;font-size:11px;color:#F09595;cursor:pointer;">
+            ✗ Can't respond
+          </button>`;
+      }
+      if (currentStatus === 'en_route') {
+        return `
+          <button onclick="window.updateVolunteerStatus('${incidentId}', 'arrived')"
+            style="background:#854F0B;border:none;border-radius:6px;padding:7px 14px;
+            font-size:11px;color:#FAC775;cursor:pointer;">
+            📍 I've arrived
+          </button>`;
+      }
+      if (currentStatus === 'arrived') {
+        return `
+          <button onclick="window.resolveByVolunteer('${incidentId}')"
+            style="background:#0F6E56;border:none;border-radius:6px;padding:7px 14px;
+            font-size:11px;color:#9FE1CB;cursor:pointer;">
+            ✅ Issue resolved
+          </button>
+          <button onclick="window.escalateByVolunteer('${incidentId}')"
+            style="background:#A32D2D;border:none;border-radius:6px;padding:7px 14px;
+            font-size:11px;color:#FCEBEB;cursor:pointer;">
+            🆘 Need more help
+          </button>`;
+      }
+      return '';
+    }
+
+    // ── LOAD MY ASSIGNED TASKS ────────────────────────────────────────────
+    function loadMyTasks(uid, volunteerDocId = null) {
+      if (unsubscribeTasks) unsubscribeTasks();
+
+      const container = document.getElementById('myTasks');
+      if (!container) return;
+
+      // Robust listener: avoid composite-index dependency and support both
+      // `assignedVolunteerUid` (new) and `assignedVolunteerId` (legacy).
+      unsubscribeTasks = onSnapshot(collection(db, 'incidents'), (snapshot) => {
+        const taskDocs = snapshot.docs
+          .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+          .filter(inc => {
+            const matchByUid = inc.assignedVolunteerUid && inc.assignedVolunteerUid === uid;
+            const matchByDocId = volunteerDocId && inc.assignedVolunteerId === volunteerDocId;
+            return (matchByUid || matchByDocId) && inc.status !== 'resolved';
+          })
+          .sort((a, b) => {
+            const aMs = a.timestamp?.toMillis?.() || 0;
+            const bMs = b.timestamp?.toMillis?.() || 0;
+            return bMs - aMs;
+          });
+
+        if (taskDocs.length === 0) {
+          container.innerHTML = '<p style="color:#555;padding:1rem 0;">No active tasks assigned to you yet.<br><span style="font-size:11px;color:#444;">The coordinator will assign tasks based on your skill and location.</span></p>';
+          return;
+        }
+
+        container.innerHTML = taskDocs.map(inc => {
+          const id = inc.id;
+          const borderColor = getLevelColor(inc.triageLevel);
+          const statusLabel = inc.volunteerStatus || 'assigned';
+
+          return `
+            <div style="background:#13161f;border:1px solid #2a2d3a;border-radius:8px;
+              padding:14px;margin-bottom:10px;border-left:3px solid ${borderColor}">
+
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-size:12px;font-weight:700;color:#f0f0f0;">${inc.type || 'Unknown'}</span>
+                <span style="font-size:10px;background:${borderColor}22;color:${borderColor};
+                  border:1px solid ${borderColor}44;border-radius:4px;padding:1px 6px;font-weight:600;">
+                  Level ${inc.triageLevel || '?'}
+                </span>
+                <span style="font-size:10px;color:#555;margin-left:auto;">${timeAgo(inc.timestamp)}</span>
+              </div>
+
+              <div style="font-size:11px;color:#666;margin-bottom:6px;">📍 ${inc.location || 'Location unavailable'}</div>
+
+              ${inc.triageReasoning ? `<div style="font-size:10px;color:#888;font-style:italic;
+                margin-bottom:10px;line-height:1.4;">${inc.triageReasoning}</div>` : ''}
+
+              <div style="font-size:10px;color:#888;margin-bottom:10px;">
+                Status:
+                <span id="status-${id}" style="color:#EF9F27;font-weight:600;">
+                  ${statusLabel.replace('_', ' ').toUpperCase()}
+                </span>
+              </div>
+
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                ${getVolunteerActions(id, inc.volunteerStatus)}
+              </div>
+            </div>`;
+        }).join('');
+      }, (err) => {
+        console.warn('[MyTasks] listener error:', err.message);
+        container.innerHTML = '<p style="color:#F09595;font-size:12px;">Could not load tasks right now. Please refresh and try again.</p>';
+      });
+    }
+
+    async function getVolunteerDocIdForUid(uid) {
+      try {
+        const volQ = query(collection(db, 'volunteers'), where('uid', '==', uid));
+        const snap = await getDocs(volQ);
+        if (snap.empty) return null;
+        return snap.docs[0].id;
+      } catch (err) {
+        console.warn('[MyTasks] could not resolve volunteer doc ID:', err.message);
+        return null;
+      }
+    }
+
+    // ── GLOBAL ACTION FUNCTIONS (called from innerHTML onclick) ───────────
+    window.updateVolunteerStatus = async function(incidentId, newStatus) {
+      try {
+        await updateDoc(doc(db, 'incidents', incidentId), {
+          volunteerStatus: newStatus,
+          volunteerStatusUpdatedAt: serverTimestamp()
+        });
+        await addDoc(collection(db, 'incidents', incidentId, 'timeline'), {
+          action: newStatus,
+          actor: auth.currentUser?.email || 'volunteer',
+          timestamp: serverTimestamp(),
+          details: getStatusLabel(newStatus)
+        });
+        showToast('Status updated: ' + getStatusLabel(newStatus));
+      } catch (err) {
+        console.error('[Volunteer] Status update failed:', err);
+        alert('Update failed: ' + err.message);
+      }
+    };
+
+    window.resolveByVolunteer = async function(incidentId) {
+      const notes = prompt('Add a resolution note (optional):', 'Issue resolved on site');
+      if (notes === null) return; // user hit Cancel
+      try {
+        await updateDoc(doc(db, 'incidents', incidentId), {
+          status:          'resolved',
+          volunteerStatus: 'resolved',
+          resolvedAt:      serverTimestamp(),
+          resolvedBy:      auth.currentUser?.email || 'volunteer',
+          resolutionNotes: notes || 'Resolved by volunteer'
+        });
+        await addDoc(collection(db, 'incidents', incidentId, 'timeline'), {
+          action:    'resolved',
+          actor:     auth.currentUser?.email || 'volunteer',
+          timestamp: serverTimestamp(),
+          details:   notes || 'Issue resolved on site by volunteer'
+        });
+        showToast('Incident marked as resolved ✅');
+      } catch (err) {
+        alert('Could not mark as resolved: ' + err.message);
+      }
+    };
+
+    window.escalateByVolunteer = async function(incidentId) {
+      const notes = prompt('Describe what additional help is needed:', '');
+      if (notes === null) return;
+      try {
+        await updateDoc(doc(db, 'incidents', incidentId), {
+          status:           'escalated',
+          volunteerStatus:  'needs_help',
+          escalatedAt:      serverTimestamp(),
+          escalationNotes:  notes || 'Volunteer requested backup',
+          escalatedBy:      auth.currentUser?.email || 'volunteer'
+        });
+        await addDoc(collection(db, 'incidents', incidentId, 'timeline'), {
+          action:    'escalated',
+          actor:     auth.currentUser?.email || 'volunteer',
+          timestamp: serverTimestamp(),
+          details:   notes || 'Volunteer needs backup'
+        });
+        showToast('🆘 Coordinators have been alerted!');
+      } catch (err) {
+        alert('Escalation failed: ' + err.message);
+      }
+    };
 
     function loadVolunteers(filter) {
       const listEl = document.getElementById('volunteersList');
@@ -286,6 +516,16 @@
         listEl.innerHTML = '<p style="color:#F09595">Error loading volunteers: ' + err.message + '</p>';
       });
     }
+
+    // ── AUTH STATE: show My Tasks for signed-in volunteers ───────────────
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const section = document.getElementById('myTasksSection');
+        if (section) section.style.display = 'block';
+        const volunteerDocId = await getVolunteerDocIdForUid(user.uid);
+        loadMyTasks(user.uid, volunteerDocId);
+      }
+    });
 
     document.addEventListener('DOMContentLoaded', async () => {
       try {
@@ -352,6 +592,7 @@
             location: location || 'Location not provided',
             coordinates: capturedCoords || null,
             available,
+            uid: auth.currentUser?.uid || null,   // Firebase Auth UID for task matching
             registeredAt: serverTimestamp()
           });
 
@@ -380,6 +621,15 @@
         });
       });
     });
+
+    // ── TOAST ────────────────────────────────────────────────────────────────
+    function showToast(msg, duration = 3000) {
+      const t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), duration);
+    }
   </script>
 </body>
 </html>

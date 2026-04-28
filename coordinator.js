@@ -293,8 +293,6 @@ function matchScore(incident, volunteer) {
 
   let score = 0;
 
-  if (!volunteer.available) return -1;
-
   // Skill match (0-70)
   if (expectedSkills.some(k => volunteerSkill.includes(k))) {
     score += 70;
@@ -330,8 +328,9 @@ function matchScore(incident, volunteer) {
 
 function getVolunteerMatches(incident, limit = 3) {
   return volunteerPool
+    .filter(v => v.available) // Only suggest volunteers who are available
     .map(v => ({ ...v, matchScore: matchScore(incident, v) }))
-    .filter(v => v.matchScore >= 0)
+    .filter(v => v.matchScore > 0) // Only suggest if there's some matching skill or location
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, limit);
 }
@@ -440,9 +439,9 @@ function renderList(incidents) {
                 class="coord-pill dispatch-btn"
                 data-incident-id="${inc.id}"
                 data-volunteer-id="${m.id}"
-                style="cursor:pointer; padding:4px 8px; border-radius:6px; font-size:11px;"
-                title="Score: ${m.matchScore}">
-                ${m.name || 'Volunteer'} · ${m.skill || 'General'}${distLabel(m)}
+                ${m.available ? 'style="cursor:pointer; padding:4px 8px; border-radius:6px; font-size:11px;"' : 'disabled style="cursor:not-allowed; opacity:0.5; background:#555; padding:4px 8px; border-radius:6px; font-size:11px;"'}
+                title="${m.available ? 'Score: ' + m.matchScore : 'Volunteer is currently busy'}">
+                ${m.name || 'Volunteer'} · ${m.skill || 'General'}${distLabel(m)}${m.available ? '' : ' (Busy)'}
               </button>
             `).join('')}
         </div>
@@ -558,7 +557,8 @@ function renderList(incidents) {
 
       try {
         const timelineRef = collection(db, 'incidents', id, 'timeline');
-        const timelineQ = query(timelineRef, orderBy('timestamp', 'asc'));
+        // Fetch without orderBy to avoid index/pending timestamp issues
+        const timelineQ = query(timelineRef);
         const snapshot = await getDocs(timelineQ);
 
         if (snapshot.empty) {
@@ -575,11 +575,20 @@ function renderList(incidents) {
           resolved: '#2ecc71', updated: '#95a5a6', escalated: '#e74c3c'
         };
 
+        let events = [];
+        snapshot.forEach(docSnap => events.push(docSnap.data()));
+        
+        // Sort manually by timestamp
+        events.sort((a, b) => {
+          const tA = a.timestamp?.toMillis?.() || 0;
+          const tB = b.timestamp?.toMillis?.() || 0;
+          return tA - tB;
+        });
+
         let html = '<div style="position:relative;padding-left:24px;">';
         html += '<div style="position:absolute;left:8px;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.08);"></div>';
 
-        snapshot.forEach(docSnap => {
-          const entry = docSnap.data();
+        events.forEach(entry => {
           const ts = entry.timestamp?.toDate?.();
           const timeStr = ts ? ts.toLocaleString('en-US', {
             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -652,9 +661,15 @@ window.showPanel = function(name) {
 
   // Hide right panel if not on incidents or history (optional, to give more space)
   const rightPanel = document.querySelector('.coord-rightpanel');
-  if (rightPanel) {
-    if (name === 'incidents') rightPanel.style.display = 'block';
-    else rightPanel.style.display = 'none';
+  const layout = document.querySelector('.coord-layout');
+  if (rightPanel && layout) {
+    if (name === 'incidents') {
+      rightPanel.style.display = 'block';
+      layout.classList.remove('no-rightpanel');
+    } else {
+      rightPanel.style.display = 'none';
+      layout.classList.add('no-rightpanel');
+    }
   }
 
   // Render insights charts when switching to insights panel

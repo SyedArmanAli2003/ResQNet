@@ -679,13 +679,6 @@ body.coord-page {
   min-width: 0;
 }
 
-#panel-insights canvas {
-  width: 100% !important;
-  height: auto !important;
-  max-width: 100%;
-  display: block;
-}
-
 #panel-insights #insightsMap {
   width: 100%;
 }
@@ -1123,4 +1116,24 @@ body.coord-page {
 }
 .dark-popup .leaflet-popup-close-button {
   color: #8e96a3;
+}
+
+/* ── VOLUNTEER STATUS BADGES ───────────────────────────────────────────── */
+.vol-status-badge {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: 0.03em;
+}
+
+.needs-backup-badge {
+  animation: pulse-red 1s ease infinite;
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
 }
