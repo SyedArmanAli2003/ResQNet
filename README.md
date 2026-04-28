@@ -509,9 +509,12 @@ ResQNet addresses **UN Sustainable Development Goals**:
 
 ---
 
-## 👨‍💻 Authors
+## 👨‍💻 Authors and Contributors
 
 **Syed Arman Ali** · [GitHub](https://github.com/SyedArmanAli2003)
+**Aysha Tahoor** [GitHub](https://github.com/AyshaTahoor)
+**Krish** [GitHub](https://github.com/krishna2838)
+
 
 Built for the **Google Solution Challenge 2026**.
 
