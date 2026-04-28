@@ -60,16 +60,35 @@ body {
 
 @media (max-width: 900px) {
   .dashboard-page {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    display: flex;
+    flex-direction: column;
     height: auto;
     min-height: 100vh;
+    padding-bottom: 60px; /* Space for mobile tabs */
   }
   aside.sidebar {
     display: none;
   }
   aside.action-panel {
+    display: block;
+    order: -1;
+    border-left: none;
+    border-bottom: 1px solid var(--border);
+    padding: 1rem;
+  }
+  aside.action-panel .stats-section,
+  aside.action-panel .triage-section {
     display: none;
+  }
+  .feed-section {
+    order: 1;
+    overflow: visible;
+  }
+  .feed-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
   }
 }
 
@@ -989,24 +1008,29 @@ body.coord-page {
   }
 
   .coord-mobile-tabs {
-    display: grid;
+    display: flex;
+    justify-content: space-around;
+  }
+  .page-layout {
+    padding-bottom: 80px;
   }
 }
   .coord-mobile-tabs {
+    display: none;
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     z-index: 900;
-    height: 56px;
+    height: 60px;
     border-top: 1px solid var(--border-strong);
     background: var(--surface);
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
   }
 
   .coord-mobile-tab {
     display: flex;
+    flex: 1;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     color: #c8cedd;
