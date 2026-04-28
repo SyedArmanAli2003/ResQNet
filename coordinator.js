@@ -851,7 +851,7 @@ if (panelSubmitBtn) {
     try {
       const fallback = fallbackTriageForType(panelSelectedCategory, desc);
 
-      await addDoc(collection(db, 'incidents'), {
+      const docRef = await addDoc(collection(db, 'incidents'), {
         type: panelSelectedCategory,
         description: desc,
         location: loc,
@@ -864,6 +864,7 @@ if (panelSubmitBtn) {
         modelUsed: 'Coordinator rule-based',
         reporterName: auth.currentUser?.email || 'Coordinator'
       });
+      addTimelineEntry(docRef.id, 'created', auth.currentUser?.email || 'Coordinator', `Incident reported directly via dashboard.`);
       document.getElementById('panelSuccessMsg').style.display = 'block';
       setTimeout(() => {
         document.getElementById('panelSuccessMsg').style.display = 'none';
@@ -1339,64 +1340,90 @@ function renderAreaRanking(incidents) {
   }
 }
 
-// ── Leaflet Incident Map ─────────────────────────────────────────────────────
+// ── Google Maps Incident Heatmap ───────────────────────────────────────────────
 function renderInsightsMap(incidents) {
   const mapEl = document.getElementById('insightsMap');
   if (!mapEl) return;
 
-  // Collect incidents with valid coordinates
+  if (typeof google === 'undefined' || !google.maps || !google.maps.visualization) {
+    setTimeout(() => renderInsightsMap(incidents), 500);
+    return;
+  }
+
   const geoIncidents = incidents.filter(i => i.coordinates && i.coordinates.lat && i.coordinates.lng);
 
   if (!insightsMap) {
-    // Default center: India (since the app seems India-focused)
-    insightsMap = L.map('insightsMap', {
-      center: [22.5, 88.0],
+    insightsMap = new google.maps.Map(mapEl, {
+      center: { lat: 22.5, lng: 88.0 },
       zoom: 5,
-      zoomControl: true,
-      attributionControl: true
+      mapTypeId: 'roadmap',
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+        { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+        { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+        { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+        { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+        { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+        { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+        { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+        { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+        { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+        { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+        { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
+      ]
     });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OSM &amp; CartoDB',
-      maxZoom: 19
-    }).addTo(insightsMap);
   }
 
-  // Clear old markers
-  insightsMapMarkers.forEach(m => insightsMap.removeLayer(m));
-  insightsMapMarkers = [];
+  // Clear old heatmap
+  if (insightsMapMarkers && typeof insightsMapMarkers.setMap === 'function') {
+    insightsMapMarkers.setMap(null);
+  }
 
-  const triageColors = { 1: '#E53935', 2: '#F57C00', 3: '#FBC02D', 4: '#4CAF50', 5: '#757575' };
-
-  geoIncidents.forEach(inc => {
+  const heatmapData = geoIncidents.map(inc => {
     const lv = inc.triageLevel || 3;
-    const color = triageColors[lv] || '#FBC02D';
-    const marker = L.circleMarker([inc.coordinates.lat, inc.coordinates.lng], {
-      radius: lv <= 2 ? 10 : (lv <= 3 ? 7 : 5),
-      color: color,
-      fillColor: color,
-      fillOpacity: 0.7,
-      weight: 2
-    });
-    marker.bindPopup(`
-      <div style="font-family:Inter,sans-serif; background:#1a1c2e; color:#f0f0f0; padding:8px; border-radius:6px; min-width:160px;">
-        <strong>${inc.type || 'Incident'}</strong><br>
-        <span style="color:${color};">Level ${lv}</span><br>
-        ${inc.location ? `📍 ${inc.location.substring(0, 60)}` : ''}<br>
-        ${inc.description ? `"${inc.description.substring(0, 80)}"` : ''}
-      </div>
-    `, { className: 'dark-popup' });
-    marker.addTo(insightsMap);
-    insightsMapMarkers.push(marker);
+    const weight = 6 - lv; // Critical (1) -> 5, Monitoring (5) -> 1
+    return {
+      location: new google.maps.LatLng(inc.coordinates.lat, inc.coordinates.lng),
+      weight: weight
+    };
   });
 
-  // Fit bounds if we have points
-  if (geoIncidents.length > 0) {
-    const bounds = L.latLngBounds(geoIncidents.map(i => [i.coordinates.lat, i.coordinates.lng]));
-    insightsMap.fitBounds(bounds.pad(0.3));
-  }
+  insightsMapMarkers = new google.maps.visualization.HeatmapLayer({
+    data: heatmapData,
+    map: insightsMap,
+    radius: 30,
+    gradient: [
+      'rgba(0, 255, 255, 0)',
+      'rgba(0, 255, 255, 1)',
+      'rgba(0, 191, 255, 1)',
+      'rgba(0, 127, 255, 1)',
+      'rgba(0, 63, 255, 1)',
+      'rgba(0, 0, 255, 1)',
+      'rgba(0, 0, 223, 1)',
+      'rgba(0, 0, 191, 1)',
+      'rgba(0, 0, 159, 1)',
+      'rgba(0, 0, 127, 1)',
+      'rgba(63, 0, 91, 1)',
+      'rgba(127, 0, 63, 1)',
+      'rgba(191, 0, 31, 1)',
+      'rgba(255, 0, 0, 1)'
+    ]
+  });
 
-  // Force tile redraw (needed when map was hidden)
-  setTimeout(() => insightsMap.invalidateSize(), 200);
+  // Fit bounds
+  if (geoIncidents.length > 0) {
+    const bounds = new google.maps.LatLngBounds();
+    geoIncidents.forEach(inc => {
+      bounds.extend(new google.maps.LatLng(inc.coordinates.lat, inc.coordinates.lng));
+    });
+    insightsMap.fitBounds(bounds);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
