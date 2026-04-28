@@ -703,7 +703,11 @@
           }
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (!text) { console.warn(`[Gemini] ${model.label} returned empty`); continue; }
-          const clean = text.replace(/```json|```/g, '').trim();
+          const clean_raw = text.replace(/```json|```/g, '').trim();
+          const jsonStart = clean_raw.indexOf('{');
+          const jsonEnd = clean_raw.lastIndexOf('}');
+          if (jsonStart === -1 || jsonEnd === -1) { console.warn(`[Gemini] ${model.label} no JSON found`); continue; }
+          const clean = clean_raw.substring(jsonStart, jsonEnd + 1);
           const result = JSON.parse(clean);
           result.modelUsed = model.label;
           console.log(`[Gemini] Success with ${model.label}:`, result);

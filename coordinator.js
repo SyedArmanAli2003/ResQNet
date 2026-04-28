@@ -8,8 +8,10 @@ const GEMINI_API_KEY = typeof CONFIG !== 'undefined' ? CONFIG.GEMINI_API_KEY : '
 const GEMINI_MODELS = [
   { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',
     url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}` },
-  { name: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}` }
+  { name: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}` },
+  { name: 'gemini-1.5-flash-latest', label: 'Gemini 1.5 Flash',
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}` }
 ];
 
 async function callGeminiWithFallback(incidentData) {
@@ -32,7 +34,12 @@ async function callGeminiWithFallback(incidentData) {
       }
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) { console.warn(`[Gemini] ${model.label} returned empty`); continue; }
-      const clean = text.replace(/```json|```/g, '').trim();
+      // Robust JSON extraction: remove markdown, extract first {...} block
+      let clean = text.replace(/```json|```/g, '').trim();
+      const jsonStart = clean.indexOf('{');
+      const jsonEnd = clean.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) { console.warn(`[Gemini] ${model.label} no JSON object found`); continue; }
+      clean = clean.substring(jsonStart, jsonEnd + 1);
       const result = JSON.parse(clean);
       result.modelUsed = model.label;
       console.log(`[Gemini] Success with ${model.label}:`, result);
@@ -702,11 +709,11 @@ window.showPanel = function(name) {
   const activeLink = document.querySelector(`[data-panel="${name}"]`);
   if (activeLink) activeLink.classList.add('active');
 
-  // Hide right panel if not on incidents or history (optional, to give more space)
+  // Keep right panel visible on incidents + report panels; hide elsewhere
   const rightPanel = document.querySelector('.coord-rightpanel');
   const layout = document.querySelector('.coord-layout');
   if (rightPanel && layout) {
-    if (name === 'incidents') {
+    if (name === 'incidents' || name === 'report') {
       rightPanel.style.display = 'block';
       layout.classList.remove('no-rightpanel');
     } else {
@@ -1600,9 +1607,16 @@ if (opsAutoDispatchBtn) {
           const data = await response.json();
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
-            const clean = text.replace(/```json|```/g, '').trim();
-            matches = JSON.parse(clean);
-            break;
+            let clean = text.replace(/```json|```/g, '').trim();
+            // Robustly extract JSON array
+            const arrStart = clean.indexOf('[');
+            const arrEnd = clean.lastIndexOf(']');
+            if (arrStart !== -1 && arrEnd !== -1) {
+              clean = clean.substring(arrStart, arrEnd + 1);
+              matches = JSON.parse(clean);
+              console.log(`[AutoDispatch] Gemini matched:`, matches);
+              break;
+            }
           }
         } catch (err) { console.warn(`Auto-dispatch failed for ${model.label}`, err); }
       }
