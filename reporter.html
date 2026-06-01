@@ -722,51 +722,52 @@
     }
 
     // ── Multi-step Triage Agent ───────────────────────────────────────────────
-    // Calls the ResQNet agent backend (MongoDB history search + Gemini +
-    // volunteer match + Arize logging). Falls back to client-side Gemini/rules
-    // so the live demo still works if the backend is unreachable.
+    // Calls the Cloud Function (MongoDB history + Gemini + volunteer match +
+    // Arize). Falls back to client-side Gemini/rules if the function is
+    // unreachable so the live demo never breaks.
     async function runAgentTriage(payload) {
       const docId = payload.incidentId;
-      const BACKEND_URL = (typeof CONFIG !== 'undefined' && CONFIG.BACKEND_URL) || '';
+      // BACKEND_URL is '' in production → relative path → Firebase Hosting rewrite.
+      // For local emulator set BACKEND_URL = 'http://127.0.0.1:5001/resqnet-e74e0/us-central1'.
+      const base = (typeof CONFIG !== 'undefined' && CONFIG.BACKEND_URL) || '';
+      const triageUrl = base ? `${base}/triageIncident` : '/api/triageIncident';
 
-      if (BACKEND_URL) {
-        try {
-          console.log('[Agent] Calling backend /api/triage...');
-          const res = await fetch(`${BACKEND_URL}/api/triage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+      try {
+        console.log('[Agent] Calling', triageUrl);
+        const res = await fetch(triageUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const t = data.triage;
+          await updateDoc(doc(db, 'incidents', docId), {
+            triageLevel: t.level,
+            triageLevelName: t.levelName,
+            triageColor: t.color,
+            triageReasoning: t.reasoning,
+            volunteerTypes: t.volunteerTypes,
+            estimatedMinutes: t.estimatedMinutes,
+            triageComplete: true,
+            modelUsed: t.modelUsed || 'unknown',
+            similarIncidentsFound: data.similarIncidentsFound ?? 0,
+            suggestedVolunteers: data.suggestedVolunteers ?? [],
+            agentSteps: data.agentSteps ?? 5,
+            agentLatencyMs: data.agentLatencyMs ?? null
           });
-          if (res.ok) {
-            const data = await res.json();
-            const t = data.triage;
-            await updateDoc(doc(db, 'incidents', docId), {
-              triageLevel: t.level,
-              triageLevelName: t.levelName,
-              triageColor: t.color,
-              triageReasoning: t.reasoning,
-              volunteerTypes: t.volunteerTypes,
-              estimatedMinutes: t.estimatedMinutes,
-              triageComplete: true,
-              modelUsed: t.modelUsed || 'unknown',
-              similarIncidentsFound: data.similarIncidentsFound ?? 0,
-              suggestedVolunteers: data.suggestedVolunteers ?? [],
-              agentSteps: data.agentSteps ?? 5,
-              agentLatencyMs: data.agentLatencyMs ?? null
-            });
-            addDoc(collection(db, 'incidents', docId, 'timeline'), {
-              action: 'triaged',
-              actor: t.modelUsed || 'agent',
-              details: `Agent (${data.agentSteps ?? 5} steps, ${data.similarIncidentsFound ?? 0} similar) → Level ${t.level} (${t.levelName}): ${t.reasoning}`,
-              timestamp: serverTimestamp()
-            }).catch(() => {});
-            console.log(`[Agent] Backend triage saved — ${t.levelName} via ${t.modelUsed} in ${data.agentLatencyMs}ms`);
-            return;
-          }
-          console.warn('[Agent] Backend returned', res.status, '— falling back to client triage.');
-        } catch (err) {
-          console.warn('[Agent] Backend unreachable — falling back to client triage:', err.message);
+          addDoc(collection(db, 'incidents', docId, 'timeline'), {
+            action: 'triaged',
+            actor: t.modelUsed || 'agent',
+            details: `Agent (${data.agentSteps ?? 5} steps, ${data.similarIncidentsFound ?? 0} similar) → Level ${t.level} (${t.levelName}): ${t.reasoning}`,
+            timestamp: serverTimestamp()
+          }).catch(() => {});
+          console.log(`[Agent] Function triage saved — ${t.levelName} via ${t.modelUsed} in ${data.agentLatencyMs}ms`);
+          return;
         }
+        console.warn('[Agent] Function returned', res.status, '— falling back to client triage.');
+      } catch (err) {
+        console.warn('[Agent] Function unreachable — falling back to client triage:', err.message);
       }
 
       // Fallback: client-side Gemini + rules (no MongoDB/Arize).

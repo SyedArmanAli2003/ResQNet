@@ -1,4 +1,13 @@
-# ResQNet Crisis Triage Agent — Backend
+# ResQNet Crisis Triage Agent — Express Backend (superseded)
+
+> **This standalone Express server has been replaced by Firebase Cloud Functions.**
+> The production agent lives in [`functions/`](../functions/) and deploys alongside
+> Firebase Hosting with `firebase deploy --only functions`.
+> This directory is kept for reference. Use `functions/` for all new development.
+
+---
+
+# ResQNet Crisis Triage Agent — Express Backend
 
 This is the **agentic backend** for ResQNet, built for the **Rapid Agent** track. It runs the
 multi-step crisis triage agent server-side, where the MongoDB Atlas driver and Arize

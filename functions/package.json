@@ -1,0 +1,24 @@
+{
+  "name": "resqnet-functions",
+  "version": "1.0.0",
+  "description": "ResQNet Cloud Functions — agentic triage, MongoDB sync, volunteer query",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions,hosting",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.3.0",
+    "firebase-functions": "^6.0.0",
+    "mongodb": "^6.8.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-google": "^0.14.0"
+  }
+}

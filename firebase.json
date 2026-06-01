@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "source": "functions"
+  },
   "firestore": {
     "rules": "firestore.rules"
   },
@@ -7,7 +10,9 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "functions/**",
+      "server/**"
     ],
     "headers": [
       {
@@ -20,10 +25,10 @@
       }
     ],
     "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
+      { "source": "/api/triageIncident", "function": "triageIncident", "region": "us-central1" },
+      { "source": "/api/volunteers",     "function": "getVolunteers",   "region": "us-central1" },
+      { "source": "/api/syncIncident",   "function": "syncIncident",    "region": "us-central1" },
+      { "source": "**", "destination": "/index.html" }
     ]
   }
 }
