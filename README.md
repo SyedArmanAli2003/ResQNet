@@ -283,6 +283,10 @@ Profile management page for signed-in users.
 | Typography | Google Fonts — Inter |
 | Auth | Firebase Authentication (Email/Password, Google OAuth, Anonymous) |
 | Database | Firebase Cloud Firestore (real-time listeners) |
+| Agent backend | Node.js + Express (`server/`) — multi-step triage agent |
+| Agent config | Vertex AI Agent Builder format (`agent-config.json`) |
+| Agent memory/search | MongoDB Atlas (`incidents`, `volunteers`, `agent_decisions`) |
+| Observability | Arize / Phoenix trace export |
 | AI Triage | Google Gemini API (2.5 Flash → 1.5 Flash fallback) |
 | Maps | Leaflet.js + OpenStreetMap tiles |
 | Charts | Chart.js (pie, bar, line) |
@@ -340,7 +344,21 @@ npx http-server -p 4173
 # http://localhost:4173/index.html
 ```
 
-### 5. Demo Credentials
+### 5. Run the Agent Backend (Rapid Agent track)
+The multi-step triage agent runs in `server/`. It's optional for a basic demo (the browser
+falls back to client-side triage), but required for MongoDB history search + Arize observability.
+
+```bash
+cd server
+cp .env.example .env      # fill in GEMINI_API_KEY, MONGODB_URI, ARIZE_API_KEY
+npm install
+npm start                 # → http://localhost:8787
+```
+
+Then make sure `BACKEND_URL` in `config.js` points at it (default `http://localhost:8787`).
+Full setup — including the MongoDB Atlas `resqnet-cluster` — is in [`server/README.md`](server/README.md).
+
+### 6. Demo Credentials
 The coordinator dashboard includes demo credentials in the login modal:
 ```
 Email:    resqnet.coordinator@gmail.com
@@ -381,7 +399,16 @@ GD-Solution-challange-2026/
 ├── history.html        # Incident history viewer
 ├── account.html        # User account settings
 ├── style.css           # Shared design system (CSS variables, components)
-├── config.js           # Runtime config (Gemini API key)
+├── agent-config.json   # Crisis Triage Agent (Vertex AI Agent Builder format)
+├── server/             # Agentic backend (Node/Express) — Rapid Agent track
+│   ├── server.js       #   Express API (/api/triage, /api/sync-incident, /health)
+│   ├── agent.js        #   runTriageAgent — multi-step orchestrator
+│   ├── agent-tools.js  #   search_incidents · get_volunteers · log_to_arize
+│   ├── gemini.js       #   Server-side Gemini triage + rule fallback
+│   ├── mongodb.js      #   MongoDB Atlas client + incident sync
+│   ├── .env.example    #   Backend secrets template (gitignored .env)
+│   └── README.md       #   Backend setup & API docs
+├── config.js           # Runtime config (Gemini API key, BACKEND_URL)
 ├── config.example.js   # Config template for new developers
 ├── firebaseConfig.js   # Firebase credentials helper
 ├── auth.js             # Auth helper module
@@ -493,6 +520,49 @@ Return: { level, levelName, color, reasoning, volunteerTypes, estimatedMinutes }
 3. Rule-based keyword engine (final fallback)
 
 This cascade ensures **zero downtime** for triage even under API quota limits.
+
+---
+
+## 🧠 Crisis Triage Agent (Rapid Agent track)
+
+Beyond a single Gemini call, ResQNet ships a **multi-step agentic backend** (in [`server/`](server/))
+that turns triage into a tool-using agent. The agent is declared in
+[`agent-config.json`](agent-config.json) using **Vertex AI Agent Builder** format and orchestrated
+by `runTriageAgent` ([`server/agent.js`](server/agent.js)).
+
+**Why a backend?** The MongoDB Atlas driver and Arize trace export use raw TCP / server-only
+APIs that cannot run in a browser. So the agent runs server-side: the browser writes the incident
+to Firestore and calls `POST /api/triage`; the agent returns its decision and the browser saves the
+triage fields back to Firestore under the reporter's auth. If the backend is down, the browser
+**falls back to its built-in client-side triage**, so the live demo never breaks.
+
+**Agent steps & tools** (tools defined in [`server/agent-tools.js`](server/agent-tools.js)):
+
+1. `search_incidents` — query **MongoDB Atlas** for similar resolved past incidents (history context)
+2. Build a history-aware prompt (average past triage level for the area)
+3. **Gemini** (`2.5-flash` → `1.5-flash` → rules) for severity + reasoning
+4. `get_volunteers` — match available volunteers by skill from MongoDB
+5. `log_to_arize` — export an observability trace (best-effort, never fatal)
+6. Persist the full decision to the `agent_decisions` MongoDB collection
+
+The browser then stores `similarIncidentsFound`, `suggestedVolunteers`, `agentSteps`, and
+`agentLatencyMs` on the incident alongside the standard triage fields.
+
+### MongoDB Atlas
+
+A free-tier cluster **`resqnet-cluster`** with database **`resqnet`** holds three collections:
+`incidents` (mirror of Firestore, searched for history), `volunteers` (mirror, matched by skill),
+and `agent_decisions` (written by the agent on every run). The browser calls `/api/sync-incident`
+on each new report to keep `incidents` in sync.
+
+### Arize observability
+
+Each triage emits a trace (`span_id`, model, input/output, latency, level tag) to Arize / Phoenix
+for monitoring agent decisions and latency.
+
+> **Setup & run:** see [`server/README.md`](server/README.md). Secrets (`MONGODB_URI`,
+> `ARIZE_API_KEY`, `GEMINI_API_KEY`) live in `server/.env` (gitignored) — never in the
+> browser-served `config.js`. The browser's `BACKEND_URL` (in `config.js`) points at the backend.
 
 ---
 

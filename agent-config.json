@@ -1,0 +1,17 @@
+{
+  "displayName": "ResQNet Crisis Triage Agent",
+  "defaultLanguageCode": "en",
+  "description": "Multi-step AI agent that triages community crisis reports, matches volunteers, and monitors incident resolution.",
+  "agents": [
+    {
+      "name": "triage-agent",
+      "model": "gemini-2.5-flash",
+      "instruction": "You are ResQNet's crisis coordinator AI. When given an incident report:\n1. Search MongoDB for similar past incidents in the same location\n2. Determine severity level 1-5 based on incident type, description, and historical patterns\n3. Query available volunteers with matching skills\n4. Select the best volunteer match using proximity and skill score\n5. Generate dispatch recommendation with full reasoning\n6. Log your decision to Arize for monitoring\n\nYou have access to these tools:\n- search_incidents: search MongoDB incidents\n- get_volunteers: query volunteer collection\n- log_to_arize: send trace to Arize AI observability",
+      "tools": [
+        "search_incidents",
+        "get_volunteers",
+        "log_to_arize"
+      ]
+    }
+  ]
+}
