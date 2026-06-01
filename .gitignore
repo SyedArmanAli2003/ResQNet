@@ -1,4 +1,4 @@
-config.js
+public/config.js
 .env
 node_modules/
 .firebase/

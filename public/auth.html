@@ -53,6 +53,7 @@
     .divider div { flex: 1; height: 1px; background: #2a2d3a; }
     .divider span { font-size: 11px; color: #555; }
   </style>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
   <div class="auth-wrap">
@@ -61,7 +62,7 @@
       <p>Sign in or create an account to continue</p>
     </div>
 
-    <div class="card">
+    <div class="bg-gray-900 rounded-2xl p-8 w-full max-w-md shadow-2xl border border-gray-800 border-solid">
       <div class="tabs">
         <button class="tab-btn active" id="tabSignIn">Sign In</button>
         <button class="tab-btn" id="tabCreate">Create Account</button>
@@ -86,7 +87,7 @@
         </div>
         <button class="forgot" id="btnForgot">Forgot password?</button>
         <div class="err" id="siError"></div>
-        <button class="btn-primary" id="btnSignIn">Sign In</button>
+        <button class="bg-red-700 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors w-full cursor-pointer border-0" id="btnSignIn">Sign In</button>
       </div>
 
       <!-- CREATE ACCOUNT PANEL -->
@@ -123,7 +124,7 @@
           <input type="password" id="regConfirm" placeholder="••••••••" autocomplete="new-password" />
         </div>
         <div class="err" id="regError"></div>
-        <button class="btn-primary" id="btnCreate">Create Account</button>
+        <button class="bg-red-700 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors w-full cursor-pointer border-0" id="btnCreate">Create Account</button>
       </div>
     </div>
   </div>

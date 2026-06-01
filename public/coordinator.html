@@ -11,6 +11,7 @@
   <!-- Google Maps JavaScript API (Enable this in console.google.com) -->
   <!-- NOTE: You must replace YOUR_API_KEY with your actual API key and ensure 'Maps JavaScript API' is enabled -->
   <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB3DGlfpv0cD3eFmq-S5NQLlbwB9OUzhdc&libraries=visualization"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="coord-page">
 
@@ -123,7 +124,12 @@
 
     <!-- PANEL: HISTORY -->
     <div id="panel-history" class="panel" style="display: none; padding: 2rem;">
-      <h1 class="coord-title" style="margin-bottom: 1rem;">Incident History</h1>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h1 class="coord-title" style="margin-bottom:0;">Incident History</h1>
+        <button id="btnHistoryExportCSV" class="text-sm text-teal-400 border border-teal-900 border-solid rounded-lg px-4 py-2 hover:bg-teal-900 cursor-pointer bg-transparent transition-colors">
+          ↓ Export CSV
+        </button>
+      </div>
       <div style="display:flex; gap: 1rem; margin-bottom: 2rem;">
         <div class="coord-pill">Total: <span id="histTotal">0</span></div>
         <div class="coord-pill" style="color:var(--color-critical)">Pending: <span id="histPending">0</span></div>
@@ -174,8 +180,8 @@
     <div id="panel-insights" class="panel" style="display: none; padding: 2rem;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
         <h1 class="coord-title" style="margin-bottom:0;">Community Insights</h1>
-        <button id="btnExportCSV" class="coord-resolve-btn" style="background:#1a1c2e; border:1px solid rgba(255,255,255,0.15); color:#3498db; font-size:12px; padding:8px 16px; border-radius:8px; cursor:pointer;">
-          📥 Download CSV Report
+        <button id="btnExportCSV" class="text-sm text-teal-400 border border-teal-900 border-solid rounded-lg px-4 py-2 hover:bg-teal-900 cursor-pointer bg-transparent transition-colors">
+          ↓ Export CSV
         </button>
       </div>
       <div class="insights-grid" style="margin-bottom: 2rem;">
@@ -310,6 +316,6 @@
 
 <script src="config.js"></script>
 
-<script type="module" src="coordinator.js"></script>
+<script type="module" src="js/coordinator.js"></script>
 </body>
 </html>

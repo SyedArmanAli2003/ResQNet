@@ -6,13 +6,11 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "public": ".",
+    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**",
-      "functions/**",
-      "server/**"
+      "**/node_modules/**"
     ],
     "headers": [
       {

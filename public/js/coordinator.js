@@ -96,6 +96,7 @@ function showDashboard(user) {
   authModal.style.display = 'none';
   coordApp.style.display  = 'grid';
   if (userEmailEl && user) userEmailEl.textContent = user.email || 'Coordinator';
+  setupNotifications();
   startListening();
   listenToVolunteers();
 }
@@ -187,6 +188,74 @@ let unsubscribe = null;
 let latestIncidents = [];
 let volunteerPool = [];
 
+// ── PUSH NOTIFICATIONS ────────────────────────────────────────────────────────
+// IDs of incidents we've already notified about this session. Populated from
+// the first snapshot so a page refresh doesn't re-fire alerts for old incidents.
+const notifiedIncidentIds = new Set();
+let isFirstSnapshot = true;
+
+async function setupNotifications() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+}
+
+function notifyNewIncident(incident) {
+  if (Notification.permission !== 'granted') return;
+  if ((incident.triageLevel ?? 99) > 2) return;
+
+  const body = `${incident.type} — ${incident.location}\nLevel ${incident.triageLevel}: ${incident.triageReasoning || 'Awaiting triage'}`;
+
+  const n = new Notification('🚨 ResQNet Alert', {
+    body,
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: incident.id,
+    requireInteraction: true
+  });
+
+  n.onclick = () => {
+    window.focus();
+    n.close();
+    document.getElementById('card-' + incident.id)
+      ?.scrollIntoView({ behavior: 'smooth' });
+  };
+}
+
+// ── INCIDENT TIMELINE ─────────────────────────────────────────────────────────
+function getActionColor(action) {
+  const colors = {
+    created:    'bg-blue-500',
+    triaged:    'bg-purple-500',
+    dispatched: 'bg-yellow-500',
+    en_route:   'bg-orange-500',
+    arrived:    'bg-amber-400',
+    resolved:   'bg-green-500',
+    escalated:  'bg-red-500',
+    override:   'bg-pink-500'
+  };
+  return colors[action] || 'bg-gray-500';
+}
+
+async function loadTimeline(incidentId) {
+  const timelineRef = collection(db, 'incidents', incidentId, 'timeline');
+  const q = query(timelineRef, orderBy('timestamp', 'asc'));
+  const snap = await getDocs(q);
+
+  return snap.docs.map(docSnap => {
+    const d = docSnap.data();
+    return `
+      <div class="flex gap-3 items-start py-2">
+        <div class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getActionColor(d.action)}"></div>
+        <div>
+          <div class="text-xs text-gray-300">${d.details || ''}</div>
+          <div class="text-xs text-gray-600 mt-0.5">${d.actor || 'unknown'} · ${timeAgo(d.timestamp?.toDate?.())}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
 function startListening() {
   if (unsubscribe) return;  // already listening
 
@@ -253,6 +322,18 @@ function startListening() {
     latestIncidents = incidents;
     updateStats(activeCount, deployedCount, resolvedTodayCount, pendingTriageCount, responseTimes);
     renderList(incidents);
+
+    // Notify for newly-added Level 1-2 incidents.
+    // First snapshot seeds the Set so page refresh never re-fires old alerts.
+    snapshot.docChanges().forEach(change => {
+      if (change.type !== 'added') return;
+      const inc = { id: change.doc.id, ...change.doc.data() };
+      if (!isFirstSnapshot && !notifiedIncidentIds.has(inc.id)) {
+        notifyNewIncident(inc);
+      }
+      notifiedIncidentIds.add(inc.id);
+    });
+    isFirstSnapshot = false;
 
   }, (err) => {
     console.error('[Firestore] snapshot error:', err);
@@ -440,8 +521,8 @@ function renderList(incidents) {
     const aiReasoning = getAiReasoning(inc);
 
     const card = document.createElement('div');
-    card.className = `coord-incident-card`;
-    card.style.borderLeftColor = triage.color;
+    const twBorder = {1:'border-l-red-600',2:'border-l-orange-600',3:'border-l-yellow-500',4:'border-l-green-700',5:'border-l-gray-500'}[inc.triageLevel] || 'border-l-gray-700';
+    card.className = `bg-gray-900 border border-solid border-gray-800 rounded-xl p-4 mb-3 border-l-4 hover:bg-gray-800 transition-all ${twBorder}`;
     if (isResolved) card.style.opacity = '0.55';
 
     // Badge styling matches triage color with some opacity, unless it's analyzing
@@ -486,10 +567,10 @@ function renderList(incidents) {
             ? `<span style="font-size:11px;color:#ffb4a9;">No available match</span>`
             : matches.map(m => `
               <button
-                class="coord-pill dispatch-btn"
+                class="dispatch-btn ${m.available ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 cursor-pointer' : 'bg-gray-700 text-gray-500 opacity-50 cursor-not-allowed'} text-xs py-1 px-2 rounded-md border-0"
                 data-incident-id="${inc.id}"
                 data-volunteer-id="${m.id}"
-                ${m.available ? 'style="cursor:pointer; padding:4px 8px; border-radius:6px; font-size:11px;"' : 'disabled style="cursor:not-allowed; opacity:0.5; background:#555; padding:4px 8px; border-radius:6px; font-size:11px;"'}
+                ${m.available ? '' : 'disabled'}
                 title="${m.available ? 'Score: ' + m.matchScore : 'Volunteer is currently busy'}">
                 ${m.name || 'Volunteer'} · ${m.skill || 'General'}${distLabel(m)}${m.available ? '' : ' (Busy)'}
               </button>
@@ -506,8 +587,12 @@ function renderList(incidents) {
       <div class="coord-card-body">
         <h3 class="coord-card-title">${inc.type || 'Unknown Crisis'}</h3>
         <p class="coord-card-location">📍 ${locationLabel} &nbsp;&nbsp; 👤 ${inc.reporterName || 'Anonymous'}</p>
-        <p class="coord-card-ai">${aiReasoning}</p>
-        ${inc.description ? `<p class="coord-card-desc">"${inc.description}"</p>` : ''}
+        ${triage.isPending
+          ? `<div class="animate-pulse bg-gray-800 h-4 rounded w-3/4 mb-2"></div>
+             <div class="animate-pulse bg-gray-800 h-4 rounded w-1/2 mb-2"></div>`
+          : `<p class="coord-card-ai">${aiReasoning}</p>
+             ${inc.description ? `<p class="coord-card-desc">"${inc.description}"</p>` : ''}`
+        }
         ${matchBlock}
       </div>
       <div class="coord-card-footer" style="display: flex; justify-content: space-between; align-items: center;">
@@ -518,9 +603,9 @@ function renderList(incidents) {
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           ${modelBadge}
-          <button class="coord-resolve-btn timeline-btn" data-id="${inc.id}" style="background:transparent; border:1px solid rgba(255,255,255,0.15); color:#8e96a3; font-size:11px; padding:4px 10px;">📋 Timeline</button>
+          <button class="bg-transparent border border-solid border-gray-700 text-gray-500 text-xs py-1 px-2 rounded-md timeline-btn" data-id="${inc.id}">📋 View timeline</button>
           ${!isResolved
-            ? `<button class="coord-resolve-btn resolve-btn" data-id="${inc.id}">Mark Resolved</button>`
+            ? `<button class="bg-emerald-800 hover:bg-emerald-700 text-emerald-200 text-sm py-1 px-3 rounded-md border-0 cursor-pointer resolve-btn" data-id="${inc.id}">Mark Resolved</button>`
             : ''}
         </div>
       </div>
@@ -603,67 +688,16 @@ function renderList(incidents) {
       container.style.display = 'block';
       btn.style.borderColor = '#3498db';
       btn.style.color = '#3498db';
-      container.innerHTML = '<p style="font-size:12px;color:#8e96a3;">Loading timeline...</p>';
+      container.innerHTML = '<p class="text-xs text-gray-500 py-2">Loading timeline...</p>';
 
       try {
-        const timelineRef = collection(db, 'incidents', id, 'timeline');
-        // Fetch without orderBy to avoid index/pending timestamp issues
-        const timelineQ = query(timelineRef);
-        const snapshot = await getDocs(timelineQ);
-
-        if (snapshot.empty) {
-          container.innerHTML = '<p style="font-size:12px;color:#8e96a3;">No timeline events yet.</p>';
-          return;
-        }
-
-        const actionIcons = {
-          created: '🆕', triaged: '🤖', dispatched: '🚀', resolved: '✅',
-          updated: '📝', escalated: '⚠️'
-        };
-        const actionColors = {
-          created: '#3498db', triaged: '#9b59b6', dispatched: '#e67e22',
-          resolved: '#2ecc71', updated: '#95a5a6', escalated: '#e74c3c'
-        };
-
-        let events = [];
-        snapshot.forEach(docSnap => events.push(docSnap.data()));
-        
-        // Sort manually by timestamp
-        events.sort((a, b) => {
-          const tA = a.timestamp?.toMillis?.() || 0;
-          const tB = b.timestamp?.toMillis?.() || 0;
-          return tA - tB;
-        });
-
-        let html = '<div style="position:relative;padding-left:24px;">';
-        html += '<div style="position:absolute;left:8px;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.08);"></div>';
-
-        events.forEach(entry => {
-          const ts = entry.timestamp?.toDate?.();
-          const timeStr = ts ? ts.toLocaleString('en-US', {
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-          }) : '';
-          const icon = actionIcons[entry.action] || '📌';
-          const color = actionColors[entry.action] || '#95a5a6';
-
-          html += `
-            <div style="position:relative;margin-bottom:16px;">
-              <div style="position:absolute;left:-20px;top:2px;width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #0d1520;z-index:1;"></div>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-                <span style="font-size:12px;font-weight:600;color:${color};">${icon} ${(entry.action || 'event').charAt(0).toUpperCase() + (entry.action || 'event').slice(1)}</span>
-                <span style="font-size:10px;color:#6b7280;">${timeStr}</span>
-              </div>
-              <div style="font-size:11px;color:#c0c4cc;line-height:1.4;">${entry.details || ''}</div>
-              <div style="font-size:10px;color:#6b7280;margin-top:2px;">by ${entry.actor || 'unknown'}</div>
-            </div>
-          `;
-        });
-
-        html += '</div>';
-        container.innerHTML = html;
+        const html = await loadTimeline(id);
+        container.innerHTML = html
+          ? `<div class="divide-y divide-gray-800">${html}</div>`
+          : '<p class="text-xs text-gray-500 py-2">No activity yet</p>';
       } catch (err) {
         console.error('[Timeline] Load failed:', err);
-        container.innerHTML = '<p style="font-size:12px;color:#F09595;">Failed to load timeline.</p>';
+        container.innerHTML = '<p class="text-xs text-red-400 py-2">Failed to load timeline.</p>';
       }
     });
   });
@@ -1564,6 +1598,11 @@ function exportIncidentsCSV() {
 const btnExportCSV = document.getElementById('btnExportCSV');
 if (btnExportCSV) {
   btnExportCSV.addEventListener('click', exportIncidentsCSV);
+}
+
+const btnHistoryExportCSV = document.getElementById('btnHistoryExportCSV');
+if (btnHistoryExportCSV) {
+  btnHistoryExportCSV.addEventListener('click', exportIncidentsCSV);
 }
 
 // Wire up OPERATIONS panel buttons
