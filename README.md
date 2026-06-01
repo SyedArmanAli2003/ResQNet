@@ -344,7 +344,7 @@ npx http-server -p 4173
 The coordinator dashboard includes demo credentials in the login modal:
 ```
 Email:    resqnet.coordinator@gmail.com
-Password: (contact the project author)
+Password: ResQNet@2026
 ```
 
 ---
