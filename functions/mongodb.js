@@ -91,4 +91,42 @@ async function saveAgentDecision(doc) {
   await db().collection('agent_decisions').insertOne(doc)
 }
 
-module.exports = { getMongoClient, syncIncident, searchIncidents, findVolunteers, saveAgentDecision }
+/**
+ * All-time analytics for the coordinator Insights panel, computed with a
+ * single MongoDB aggregation `$facet` (one round-trip) — deliberately served
+ * from MongoDB rather than Firestore to demonstrate partner usage.
+ * Returns: total incidents, most common crisis type, area with most incidents.
+ */
+async function getAnalytics() {
+  await getMongoClient()
+  const [facet] = await db().collection('incidents').aggregate([
+    {
+      $facet: {
+        total: [{ $count: 'count' }],
+        byType: [
+          { $match: { type: { $nin: [null, ''] } } },
+          { $group: { _id: '$type', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 1 },
+        ],
+        byArea: [
+          { $match: { location: { $nin: [null, ''] } } },
+          { $group: { _id: '$location', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 1 },
+        ],
+      },
+    },
+  ]).toArray()
+
+  return {
+    totalIncidents: facet?.total?.[0]?.count || 0,
+    mostCommonType: facet?.byType?.[0]?._id || null,
+    mostCommonTypeCount: facet?.byType?.[0]?.count || 0,
+    topArea: facet?.byArea?.[0]?._id || null,
+    topAreaCount: facet?.byArea?.[0]?.count || 0,
+    source: 'mongodb-atlas',
+  }
+}
+
+module.exports = { getMongoClient, syncIncident, searchIncidents, findVolunteers, saveAgentDecision, getAnalytics }

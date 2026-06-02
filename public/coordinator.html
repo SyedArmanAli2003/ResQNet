@@ -58,6 +58,13 @@
     <div style="display:flex;flex-direction:column;gap:8px">
       <div class="coord-badge" style="font-size:0.8rem; background:transparent; border:none; padding-left:0; color:var(--text-dim);">Logged in as:<br><span id="userEmail" style="color:#fff; font-size:0.85rem;"></span></div>
       <button id="signOutBtn" class="coord-badge" style="cursor:pointer;border:1px solid #ff444433;background:#2a1111;color:#ff6b6b;text-align:center;justify-content:center;" title="Sign out">Sign out</button>
+
+      <!-- Partner stack footer -->
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-top:8px; border-top:1px solid var(--border); margin-top:4px;">
+        <span style="font-size:10px; color:var(--text-dim);">Powered by</span>
+        <span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; color:#FFCA28; background:rgba(255,202,40,0.08); border:1px solid #FFCA2840; border-radius:999px; padding:2px 7px;">🔥 Firebase</span>
+        <span id="mongoFooterBadge" title="MongoDB Atlas — partner integration" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; color:#00ED64; background:rgba(0,237,100,0.08); border:1px solid #00684A; border-radius:999px; padding:2px 7px;">🍃 MongoDB</span>
+      </div>
     </div>
   </aside>
 
@@ -169,7 +176,24 @@
           <button id="runTriageTestBtn" class="btn-primary" style="padding:0.7rem 1rem; font-size:0.9rem;">Run 5-level test</button>
           <div id="triageTestResult" style="margin-top:0.8rem; color:var(--text-dim); font-size:0.88rem;">Not run yet.</div>
         </div>
-        
+
+        <!-- AI Observability (partner track — Arize Phoenix). Traces read live from Firestore. -->
+        <div style="margin-bottom: 2rem; border:1px solid #6E56CF55; border-radius:10px; padding:1rem; background:var(--bg-surface);">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:0.4rem;">
+            <h3 style="margin:0; font-size:1rem;">AI Observability</h3>
+            <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#A78BFA; background:rgba(110,86,207,0.12); border:1px solid #6E56CF; border-radius:999px; padding:3px 10px;">📊 Powered by Arize</span>
+          </div>
+          <p style="margin:0 0 0.9rem; color:var(--text-dim); font-size:0.88rem;">Every AI triage emits an OpenTelemetry span to Arize Phoenix (model, tokens, latency, level).</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
+            <a href="https://app.phoenix.arize.com" target="_blank" rel="noopener" style="font-size:0.85rem; color:#A78BFA; border:1px solid #6E56CF66; border-radius:8px; padding:7px 12px; text-decoration:none;">Open Arize dashboard ↗</a>
+            <span id="arizeSuccessRate" style="font-size:0.8rem; color:var(--text-dim); border:1px solid var(--border); border-radius:999px; padding:5px 10px;">Triage success rate: —</span>
+          </div>
+          <div style="font-size:0.78rem; color:var(--text-dim); margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.04em;">Last 5 triage traces</div>
+          <div id="arizeTracesList" style="display:flex; flex-direction:column; gap:0.5rem;">
+            <p style="color:var(--text-dim); font-size:0.85rem; margin:0;">No traces yet.</p>
+          </div>
+        </div>
+
         <hr style="border:none; border-top:1px solid var(--border); margin-bottom:2rem;" />
         
         <button id="settingsSignOut" class="btn-primary" style="background:#2a1111; color:#ff6b6b; padding:0.8rem 2rem;">Sign Out</button>
@@ -184,6 +208,32 @@
           ↓ Export CSV
         </button>
       </div>
+
+      <!-- MongoDB Analytics (partner track) — figures come from a MongoDB Atlas
+           aggregation pipeline via /api/analytics, NOT from Firestore. -->
+      <div style="background:var(--bg-deep); padding:1.5rem; border-radius:12px; border:1px solid #00684A66; margin-bottom:2rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem; flex-wrap:wrap; gap:8px;">
+          <h3 style="margin:0; font-size:1rem; color:var(--text-dim);">MongoDB Analytics</h3>
+          <span style="display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#00ED64; background:rgba(0,237,100,0.08); border:1px solid #00684A; border-radius:999px; padding:3px 10px;">🍃 MongoDB Atlas</span>
+        </div>
+        <p style="font-size:11px; color:var(--text-dim); margin:0 0 1rem;">All-time aggregation pipeline — served from MongoDB, not Firestore.</p>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:1rem;">
+          <div style="background:var(--bg-surface); padding:1rem; border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.3rem;">Total incidents (all time)</div>
+            <div id="mongoTotalIncidents" style="font-size:1.6rem; font-weight:700; color:#00ED64;">—</div>
+          </div>
+          <div style="background:var(--bg-surface); padding:1rem; border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.3rem;">Most common crisis type</div>
+            <div id="mongoTopType" style="font-size:1.6rem; font-weight:700; color:var(--text-main);">—</div>
+          </div>
+          <div style="background:var(--bg-surface); padding:1rem; border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.3rem;">Area with most incidents</div>
+            <div id="mongoTopArea" style="font-size:1.05rem; font-weight:700; color:var(--text-main); line-height:1.3;">—</div>
+          </div>
+        </div>
+        <p id="mongoAnalyticsStatus" style="font-size:11px; color:var(--text-dim); margin:0.75rem 0 0;"></p>
+      </div>
+
       <div class="insights-grid" style="margin-bottom: 2rem;">
         <!-- Type Breakdown -->
         <div style="background:var(--bg-deep); padding:1.5rem; border-radius:12px; border:1px solid var(--border); display:flex; flex-direction:column; align-items:center;">

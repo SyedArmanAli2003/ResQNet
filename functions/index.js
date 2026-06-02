@@ -2,8 +2,9 @@
 
 const { onRequest } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params')
-const { syncIncident, searchIncidents, findVolunteers, saveAgentDecision } = require('./mongodb')
+const { syncIncident, searchIncidents, findVolunteers, saveAgentDecision, getAnalytics } = require('./mongodb')
 const { callGemini, fallbackTriage } = require('./gemini')
+const { logTriageToArize } = require('./arize')
 
 // ── Secret declarations (stored in Google Cloud Secret Manager) ─────────────
 // Set once with: firebase functions:secrets:set GEMINI_API_KEY  (etc.)
@@ -22,34 +23,6 @@ function setCors(res) {
   res.set('Access-Control-Allow-Origin', '*')
   res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   res.set('Access-Control-Allow-Headers', 'Content-Type')
-}
-
-// ── Arize trace export (best-effort) ────────────────────────────────────────
-async function logToArize({ incidentId, modelUsed, triageLevel, reasoning, latencyMs }) {
-  const url = process.env.ARIZE_TRACE_URL || 'https://app.phoenix.arize.com/v1/traces'
-  const key = process.env.ARIZE_API_KEY
-  if (!key || key === 'your-arize-key') {
-    console.log('[Arize] disabled — trace:', incidentId, 'level', triageLevel)
-    return
-  }
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', api_key: key },
-      body: JSON.stringify({
-        span_id: incidentId,
-        name: 'crisis_triage',
-        model: modelUsed,
-        input: { incidentId },
-        output: { triageLevel, reasoning },
-        latency_ms: latencyMs,
-        tags: { level: triageLevel },
-      }),
-    })
-    console.log('[Arize] trace logged:', incidentId, '→', r.status)
-  } catch (err) {
-    console.warn('[Arize] export failed (non-fatal):', err.message)
-  }
 }
 
 // ── POST /api/triageIncident ─────────────────────────────────────────────────
@@ -118,8 +91,18 @@ exports.triageIncident = onRequest(
     const latencyMs = Date.now() - startTime
     const suggestedVolunteers = volunteers.slice(0, 3).map((v) => ({ name: v.name, skill: v.skill }))
 
-    // Step 5 — log to Arize (best-effort)
-    await logToArize({ incidentId, modelUsed: triage.modelUsed, triageLevel: triage.level, reasoning: triage.reasoning, latencyMs })
+    // Step 5 — export OpenTelemetry trace to Arize Phoenix (best-effort)
+    await logTriageToArize({
+      incidentId,
+      incidentType: type,
+      location: req.body.location,
+      triageLevel: triage.level,
+      reasoning: triage.reasoning,
+      modelUsed: triage.modelUsed,
+      latencyMs,
+      promptTokens: triage.promptTokens || 0,
+      completionTokens: triage.completionTokens || 0,
+    })
 
     // Step 6 — persist decision to MongoDB (best-effort)
     try {
@@ -143,6 +126,8 @@ exports.triageIncident = onRequest(
       suggestedVolunteers,
       agentSteps: 5,
       agentLatencyMs: latencyMs,
+      promptTokens: triage.promptTokens || 0,
+      completionTokens: triage.completionTokens || 0,
     })
   }
 )
@@ -191,6 +176,26 @@ exports.syncIncident = onRequest(
       return res.json({ success: true })
     } catch (err) {
       console.error('[syncIncident] failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
+)
+
+// ── GET /api/analytics ───────────────────────────────────────────────────────
+// All-time MongoDB aggregation for the coordinator Insights panel. Powers the
+// "MongoDB Analytics" section (total incidents, top crisis type, top area).
+exports.analytics = onRequest(
+  { region: REGION, secrets: [MONGODB_URI] },
+  async (req, res) => {
+    setCors(res)
+    if (req.method === 'OPTIONS') return res.status(204).send('')
+    if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' })
+
+    try {
+      const data = await getAnalytics()
+      return res.json(data)
+    } catch (err) {
+      console.error('[analytics] failed:', err.message)
       return res.status(500).json({ error: err.message })
     }
   }

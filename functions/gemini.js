@@ -67,6 +67,10 @@ Level guide: 1=Critical(red) 2=Severe(orange) 3=Moderate(yellow) 4=Minor(green) 
       if (s === -1 || e === -1) { console.warn(`[Gemini] ${model.label} no JSON`); continue }
       const result = JSON.parse(raw.substring(s, e + 1))
       result.modelUsed = model.label
+      // Token usage for observability (Arize). Best-effort — absent on some responses.
+      const usage = data.usageMetadata || {}
+      result.promptTokens = usage.promptTokenCount || 0
+      result.completionTokens = usage.candidatesTokenCount || 0
       console.log(`[Gemini] Success: ${model.label}`)
       return result
     } catch (err) {

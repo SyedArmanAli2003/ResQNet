@@ -5,10 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ResQNet — Report an Emergency</title>
   <meta name="description" content="ResQNet Reporter — Send an SOS, request resources, or report a crisis in your area." />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#A32D2D" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ResQNet" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #installBtn {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #A32D2D, #c0392b);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 2px 10px rgba(163,45,45,0.4);
+      white-space: nowrap;
+    }
+    #installBtn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(163,45,45,0.55);
+    }
+    #installBtn.visible { display: inline-flex; }
+  </style>
 </head>
 <body class="dashboard-page">
 
@@ -60,6 +92,7 @@
         <h1 class="page-title">Report a crisis</h1>
       </div>
       <div class="header-stats">
+        <button id="installBtn" title="Add ResQNet to your home screen">⬇ Install App</button>
         <div class="badge-stat"><span id="activeCount">0</span> active</div>
         <div class="badge-stat badge-deployed"><span id="deployedCount">0</span> deployed</div>
         <div class="badge-stat badge-resolved"><span id="resolvedCount">0</span> resolved today</div>
@@ -755,7 +788,9 @@
             similarIncidentsFound: data.similarIncidentsFound ?? 0,
             suggestedVolunteers: data.suggestedVolunteers ?? [],
             agentSteps: data.agentSteps ?? 5,
-            agentLatencyMs: data.agentLatencyMs ?? null
+            agentLatencyMs: data.agentLatencyMs ?? null,
+            promptTokens: data.promptTokens ?? 0,
+            completionTokens: data.completionTokens ?? 0
           });
           addDoc(collection(db, 'incidents', docId, 'timeline'), {
             action: 'triaged',
@@ -872,6 +907,46 @@
         resetHoldState();
       });
     }
+  </script>
+
+  <!-- ── PWA: Service Worker + Install Prompt ─────────────────────────── -->
+  <script>
+    // Service Worker registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[PWA] SW registered, scope:', reg.scope))
+          .catch(err => console.warn('[PWA] SW registration failed:', err));
+      });
+    }
+
+    // Install prompt handling
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('installBtn');
+
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (installBtn) installBtn.classList.add('visible');
+      console.log('[PWA] Install prompt ready');
+    });
+
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log('[PWA] User choice:', outcome);
+        deferredPrompt = null;
+        installBtn.classList.remove('visible');
+      });
+    }
+
+    window.addEventListener('appinstalled', () => {
+      console.log('[PWA] App installed successfully');
+      if (installBtn) installBtn.classList.remove('visible');
+      deferredPrompt = null;
+    });
   </script>
 </body>
 </html>

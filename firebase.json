@@ -26,6 +26,7 @@
       { "source": "/api/triageIncident", "function": "triageIncident", "region": "us-central1" },
       { "source": "/api/volunteers",     "function": "getVolunteers",   "region": "us-central1" },
       { "source": "/api/syncIncident",   "function": "syncIncident",    "region": "us-central1" },
+      { "source": "/api/analytics",      "function": "analytics",       "region": "us-central1" },
       { "source": "**", "destination": "/index.html" }
     ]
   }

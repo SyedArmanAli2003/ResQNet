@@ -760,6 +760,11 @@ window.showPanel = function(name) {
   if (name === 'insights') {
     setTimeout(() => renderInsights(), 100);
   }
+
+  // Render AI observability traces when switching to settings panel
+  if (name === 'settings') {
+    renderObservability();
+  }
 };
 
 // Wire up nav links
@@ -1178,6 +1183,9 @@ let insightsMap = null;
 let insightsMapMarkers = [];
 
 function renderInsights() {
+  // MongoDB analytics load independently of the live Firestore feed.
+  renderMongoAnalytics();
+
   const incidents = latestIncidents;
   if (!incidents || incidents.length === 0) return;
 
@@ -1186,6 +1194,82 @@ function renderInsights() {
   renderTrendChart(incidents);
   renderAreaRanking(incidents);
   renderInsightsMap(incidents);
+}
+
+// ── MongoDB Analytics (partner track) ─────────────────────────────────────────
+// Pulls all-time aggregates from the MongoDB Atlas pipeline via /api/analytics,
+// NOT from Firestore. Degrades gracefully if the function/Mongo isn't reachable.
+async function renderMongoAnalytics() {
+  const totalEl = document.getElementById('mongoTotalIncidents');
+  const typeEl = document.getElementById('mongoTopType');
+  const areaEl = document.getElementById('mongoTopArea');
+  const statusEl = document.getElementById('mongoAnalyticsStatus');
+  if (!totalEl) return;
+
+  const base = (typeof CONFIG !== 'undefined' && CONFIG.BACKEND_URL) || '';
+  const url = base ? `${base}/analytics` : '/api/analytics';
+
+  if (statusEl) statusEl.textContent = 'Loading from MongoDB Atlas…';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    totalEl.textContent = (data.totalIncidents ?? 0).toLocaleString();
+    typeEl.textContent = data.mostCommonType
+      ? `${data.mostCommonType}${data.mostCommonTypeCount ? ` (${data.mostCommonTypeCount})` : ''}`
+      : '—';
+    areaEl.textContent = data.topArea
+      ? `${data.topArea}${data.topAreaCount ? ` · ${data.topAreaCount}` : ''}`
+      : '—';
+    if (statusEl) statusEl.textContent = `Source: ${data.source || 'mongodb-atlas'} · MongoDB aggregation pipeline`;
+  } catch (err) {
+    console.warn('[MongoAnalytics] fetch failed:', err.message);
+    totalEl.textContent = '—';
+    typeEl.textContent = '—';
+    areaEl.textContent = '—';
+    if (statusEl) statusEl.textContent = 'MongoDB analytics unavailable — backend not reachable.';
+  }
+}
+
+// ── AI Observability (partner track — Arize Phoenix) ──────────────────────────
+// Shows the last 5 triage traces (read live from the Firestore incidents feed)
+// and an AI triage success rate. Each triage also emits an OpenTelemetry span to
+// Arize from the Cloud Function; this panel is the in-app view of that activity.
+function renderObservability() {
+  const listEl = document.getElementById('arizeTracesList');
+  const rateEl = document.getElementById('arizeSuccessRate');
+  if (!listEl) return;
+
+  const triaged = (latestIncidents || []).filter(i => i.triageComplete === true && i.triageLevel != null);
+  const aiTriaged = triaged.filter(i => i.modelUsed && !/fallback/i.test(i.modelUsed));
+  const rate = triaged.length ? Math.round((aiTriaged.length / triaged.length) * 100) : 0;
+  if (rateEl) rateEl.textContent = `AI triage success rate: ${rate}% (${aiTriaged.length}/${triaged.length})`;
+
+  const last5 = [...triaged]
+    .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0))
+    .slice(0, 5);
+
+  if (last5.length === 0) {
+    listEl.innerHTML = '<p style="color:var(--text-dim); font-size:0.85rem; margin:0;">No traces yet.</p>';
+    return;
+  }
+
+  listEl.innerHTML = last5.map(t => {
+    const v = triageVisual(t.triageLevel);
+    const when = t.timestamp?.toDate?.() ? timeAgo(t.timestamp.toDate()) : '';
+    const model = t.modelUsed || 'unknown';
+    const latency = t.agentLatencyMs ? `${t.agentLatencyMs}ms` : '';
+    const totTokens = (t.promptTokens || 0) + (t.completionTokens || 0);
+    const tokens = totTokens ? `${totTokens} tok` : '';
+    const meta = [model, latency, tokens, when].filter(Boolean).join(' · ');
+    return `
+      <div style="display:flex; align-items:center; gap:8px; background:var(--bg-deep); border:1px solid var(--border); border-radius:6px; padding:6px 10px;">
+        <span style="width:8px; height:8px; border-radius:50%; background:${v.color}; flex-shrink:0;"></span>
+        <span style="font-size:0.8rem; color:var(--text-main); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${t.type || 'Incident'} · L${t.triageLevel} ${t.triageLevelName || ''}</span>
+        <span style="font-size:0.7rem; color:var(--text-dim); flex-shrink:0;">${meta}</span>
+      </div>`;
+  }).join('');
 }
 
 // ── Donut: Incident Type Breakdown ───────────────────────────────────────────
