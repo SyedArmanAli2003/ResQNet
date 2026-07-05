@@ -3,54 +3,31 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverT
 
 window.__coordBooted = true;
 
-// ── Gemini Integration ────────────────────────────────────────────────────────
-const GEMINI_API_KEY = typeof CONFIG !== 'undefined' ? CONFIG.GEMINI_API_KEY : '';
-const GEMINI_MODELS = [
-  { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}` },
-  { name: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash',
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}` },
-  { name: 'gemini-1.5-flash-latest', label: 'Gemini 1.5 Flash',
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}` }
-];
+// ── Backend AI Triage ─────────────────────────────────────────────────────────
+const BACKEND_URL = typeof CONFIG !== 'undefined' && CONFIG.BACKEND_URL ? CONFIG.BACKEND_URL : '';
 
-async function callGeminiWithFallback(incidentData) {
-  const prompt = `You are an emergency triage AI.\nAnalyze this crisis and return ONLY valid JSON.\nNo explanation, no markdown, no backticks.\n\nType: ${incidentData.type}\nDescription: ${incidentData.description || 'none'}\nVoice: ${incidentData.voiceTranscript || 'none'}\nLocation: ${incidentData.location}\n\nReturn exactly this shape:\n{"level": 1, "levelName": "Critical", "color": "red", "reasoning": "one sentence max", "volunteerTypes": ["type1"], "estimatedMinutes": 10}\n\nLevel guide:\n1 = Critical (red)\n2 = Severe (orange)\n3 = Moderate (yellow)\n4 = Minor (green)\n5 = Monitoring (gray)`;
-
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
-  });
-
-  for (const model of GEMINI_MODELS) {
-    try {
-      console.log(`[Gemini] Trying ${model.label}...`);
-      const response = await fetch(model.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-      const data = await response.json();
-      if (data.error) {
-        console.warn(`[Gemini] ${model.label} error (${data.error.code}): ${data.error.message}`);
-        if ([429, 403, 404].includes(data.error.code) || data.error.message?.includes('billing') || data.error.message?.includes('quota')) continue;
-        return null;
-      }
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) { console.warn(`[Gemini] ${model.label} returned empty`); continue; }
-      // Robust JSON extraction: remove markdown, extract first {...} block
-      let clean = text.replace(/```json|```/g, '').trim();
-      const jsonStart = clean.indexOf('{');
-      const jsonEnd = clean.lastIndexOf('}');
-      if (jsonStart === -1 || jsonEnd === -1) { console.warn(`[Gemini] ${model.label} no JSON object found`); continue; }
-      clean = clean.substring(jsonStart, jsonEnd + 1);
-      const result = JSON.parse(clean);
-      result.modelUsed = model.label;
-      console.log(`[Gemini] Success with ${model.label}:`, result);
-      return result;
-    } catch (err) {
-      console.warn(`[Gemini] ${model.label} error:`, err.message);
-      continue;
-    }
+async function callBackendTriage(incidentData) {
+  if (!BACKEND_URL) {
+    console.warn('[Triage] No backend URL configured, using fallback');
+    return null;
   }
-  console.error('[Gemini] All models failed');
-  return null;
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/triage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(incidentData)
+    });
+    if (!response.ok) {
+      console.warn(`[Triage] Backend returned ${response.status}`);
+      return null;
+    }
+    const result = await response.json();
+    console.log(`[Triage] Backend result:`, result);
+    return result;
+  } catch (err) {
+    console.warn('[Triage] Backend call failed:', err.message);
+    return null;
+  }
 }
 
 // ── Timeline Helper ───────────────────────────────────────────────────────────
@@ -899,7 +876,7 @@ if (panelSubmitBtn) {
     panelSubmitBtn.textContent = 'Submitting...';
     
     try {
-      const aiResult = await callGeminiWithFallback({ type: panelSelectedCategory, description: desc, voiceTranscript: '', location: loc });
+      const aiResult = await callBackendTriage({ type: panelSelectedCategory, description: desc, voiceTranscript: '', location: loc });
       const triage = aiResult || fallbackTriageForType(panelSelectedCategory, desc);
 
       const docRef = await addDoc(collection(db, 'incidents'), {
@@ -1088,7 +1065,7 @@ if (runTriageTestBtn && triageTestResult) {
 
     const rows = [];
     for (const t of cases) {
-      let aiResult = await callGeminiWithFallback({ type: t.type, description: t.description, voiceTranscript: '', location: 'Test' });
+      let aiResult = await callBackendTriage({ type: t.type, description: t.description, voiceTranscript: '', location: 'Test' });
       let got, usedModel;
       
       if (aiResult) {
@@ -1589,36 +1566,26 @@ if (opsAutoDispatchBtn) {
     opsAutoDispatchBtn.textContent = 'AI Dispatching...';
     showToast('Consulting Gemini for optimal matching...');
 
-    const incidentListStr = pending.map(i => `[Inc ${i.id}] Type: ${i.type}, Severity: ${i.severity}, Desc: ${i.description || 'none'}`).join('\n');
-    const volunteerListStr = available.map(v => `[Vol ${v.id}] Name: ${v.name}, Skill: ${v.skill}`).join('\n');
-
     const prompt = `You are a crisis response dispatcher.\nMatch the best available volunteers to pending incidents.\n\nPENDING INCIDENTS:\n${incidentListStr}\n\nAVAILABLE VOLUNTEERS:\n${volunteerListStr}\n\nReturn ONLY a JSON array of matches: [{"incidentId": "inc_id", "volunteerId": "vol_id"}].\nNo explanation. Only valid JSON array.`;
 
     try {
-      const body = JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 500 }
+      const dispatchResponse = await fetch(`${BACKEND_URL}/api/dispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          pendingIncidents: pending.map(i => ({ id: i.id, type: i.type })),
+          availableVolunteers: available.map(v => ({ id: v.id, name: v.name, skill: v.skill }))
+        })
       });
 
       let matches = [];
-      for (const model of GEMINI_MODELS) {
-        try {
-          const response = await fetch(model.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-          const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) {
-            let clean = text.replace(/```json|```/g, '').trim();
-            // Robustly extract JSON array
-            const arrStart = clean.indexOf('[');
-            const arrEnd = clean.lastIndexOf(']');
-            if (arrStart !== -1 && arrEnd !== -1) {
-              clean = clean.substring(arrStart, arrEnd + 1);
-              matches = JSON.parse(clean);
-              console.log(`[AutoDispatch] Gemini matched:`, matches);
-              break;
-            }
-          }
-        } catch (err) { console.warn(`Auto-dispatch failed for ${model.label}`, err); }
+      if (dispatchResponse.ok) {
+        const data = await dispatchResponse.json();
+        matches = data.matches || [];
+        console.log(`[AutoDispatch] Backend matched:`, matches);
+      } else {
+        showToast('Dispatch backend unavailable. Use manual dispatch.');
       }
 
       if (matches.length === 0) {

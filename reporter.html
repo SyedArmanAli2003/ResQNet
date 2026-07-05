@@ -645,14 +645,8 @@
       });
     }
 
-    // ── Gemini AI Triage ──────────────────────────────────────────────────────
-    const GEMINI_API_KEY = typeof CONFIG !== 'undefined' ? CONFIG.GEMINI_API_KEY : '';
-    const GEMINI_MODELS = [
-      { name: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',
-        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}` },
-      { name: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',
-        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}` }
-    ];
+    // ── Backend AI Triage ─────────────────────────────────────────────────────
+    const BACKEND_URL = typeof CONFIG !== 'undefined' && CONFIG.BACKEND_URL ? CONFIG.BACKEND_URL : '';
 
     function fallbackTriage(type, description = '', voice = '') {
       const text = `${description} ${voice}`.toLowerCase();
@@ -683,42 +677,28 @@
         volunteerTypes: ['support'], estimatedMinutes: 25, modelUsed: 'Fallback rules' };
     }
 
-    async function callGeminiWithFallback(incidentData) {
-      const prompt = `You are an emergency triage AI.\nAnalyze this crisis and return ONLY valid JSON.\nNo explanation, no markdown, no backticks.\n\nType: ${incidentData.type}\nDescription: ${incidentData.description || 'none'}\nVoice: ${incidentData.voiceTranscript || 'none'}\nLocation: ${incidentData.location}\n\nReturn exactly this shape:\n{"level": 1, "levelName": "Critical", "color": "red", "reasoning": "one sentence max", "volunteerTypes": ["type1"], "estimatedMinutes": 10}\n\nLevel guide:\n1 = Critical (red)\n2 = Severe (orange)\n3 = Moderate (yellow)\n4 = Minor (green)\n5 = Monitoring (gray)`;
-
-      const body = JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
-      });
-
-      for (const model of GEMINI_MODELS) {
-        try {
-          console.log(`[Gemini] Trying ${model.label}...`);
-          const response = await fetch(model.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-          const data = await response.json();
-          if (data.error) {
-            console.warn(`[Gemini] ${model.label} error (${data.error.code}): ${data.error.message}`);
-            if ([429, 403, 404].includes(data.error.code) || data.error.message?.includes('billing') || data.error.message?.includes('quota')) continue;
-            return null;
-          }
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text) { console.warn(`[Gemini] ${model.label} returned empty`); continue; }
-          const clean_raw = text.replace(/```json|```/g, '').trim();
-          const jsonStart = clean_raw.indexOf('{');
-          const jsonEnd = clean_raw.lastIndexOf('}');
-          if (jsonStart === -1 || jsonEnd === -1) { console.warn(`[Gemini] ${model.label} no JSON found`); continue; }
-          const clean = clean_raw.substring(jsonStart, jsonEnd + 1);
-          const result = JSON.parse(clean);
-          result.modelUsed = model.label;
-          console.log(`[Gemini] Success with ${model.label}:`, result);
-          return result;
-        } catch (err) {
-          console.warn(`[Gemini] ${model.label} error:`, err.message);
-          continue;
-        }
+    async function callBackendTriage(incidentData) {
+      if (!BACKEND_URL) {
+        console.warn('[Triage] No backend URL configured, using fallback');
+        return null;
       }
-      console.error('[Gemini] All models failed');
-      return null;
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/triage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(incidentData)
+        });
+        if (!response.ok) {
+          console.warn(`[Triage] Backend returned ${response.status}`);
+          return null;
+        }
+        const result = await response.json();
+        console.log(`[Triage] Backend result:`, result);
+        return result;
+      } catch (err) {
+        console.warn('[Triage] Backend call failed:', err.message);
+        return null;
+      }
     }
 
     if (submitBtn) {
@@ -763,9 +743,9 @@
           if (categoryModal) categoryModal.style.display = 'none';
           if (successModal) successModal.style.display = 'flex';
 
-          // Step 3: Trigger AI triage AFTER addDoc completes (no race condition)
-          console.log('[Submit] Step 3: Starting Gemini triage...');
-          callGeminiWithFallback({
+          // Step 3: Trigger AI triage via backend API
+          console.log('[Submit] Step 3: Starting AI triage...');
+          callBackendTriage({
             type: selectedCategory,
             description: incidentDesc.value,
             voiceTranscript,

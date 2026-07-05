@@ -1,5 +1,11 @@
-FROM nginx:alpine
-COPY . /usr/share/nginx/html
-RUN sed -i 's/listen\(.*\)80;/listen 8080;/g' /etc/nginx/conf.d/default.conf
-EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY server/package.json server/package-lock.json* ./server/
+RUN npm install --prefix server
+
+FROM node:20-alpine
+WORKDIR /app
+COPY . .
+COPY --from=builder /app/server/node_modules ./server/node_modules
+EXPOSE 3000
+CMD ["node", "server/index.js"]

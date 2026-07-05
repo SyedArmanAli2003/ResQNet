@@ -1,0 +1,11 @@
+{
+  "name": "resqnet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ResQNet — Crisis Response Platform",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "install:server": "npm install --prefix server"
+  }
+}
