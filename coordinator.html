@@ -157,6 +157,21 @@
         </div>
         <button id="saveSettingsBtn" class="btn-primary" style="padding:0.8rem 2rem; margin-bottom:2rem;">Save Changes</button>
 
+        <!-- AI Model Selector -->
+        <div style="margin-bottom: 2rem; border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:1.25rem; background:rgba(0,212,255,0.04);">
+          <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:1rem;">
+            <span style="font-size:1.1rem;">🤖</span>
+            <h3 style="margin:0; font-size:1rem;">AI Triage Model</h3>
+            <span id="activeModelBadge" style="margin-left:auto; font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; background:rgba(0,212,255,0.15); color:#00d4ff; border:1px solid rgba(0,212,255,0.3);">Loading…</span>
+          </div>
+          <p style="color:var(--text-dim); font-size:0.83rem; margin-bottom:1rem; line-height:1.5;">
+            Select which AI model performs emergency triage. <strong style="color:var(--text-main);">DeepSeek V4 Flash</strong> is the default — it uses chain-of-thought reasoning for the most accurate severity scoring. The cascade falls through automatically if a model is unavailable.
+          </p>
+          <div id="modelSelectorList" style="display:flex; flex-direction:column; gap:0.5rem;">
+            <div style="color:var(--text-dim); font-size:0.83rem;">Loading models…</div>
+          </div>
+        </div>
+
         <div style="margin-bottom: 2rem; border:1px solid var(--border); border-radius:10px; padding:1rem; background:var(--bg-surface);">
           <h3 style="margin-bottom:0.4rem; font-size:1rem;">Triage Self-Test</h3>
           <p style="margin-bottom:0.8rem; color:var(--text-dim); font-size:0.88rem;">Runs 5 deterministic checks (Levels 1-5) and shows pass/fail.</p>
@@ -308,8 +323,7 @@
 
 <div id="toast" class="toast" role="alert" aria-live="polite"></div>
 
-<script src="config.js"></script>
-
-<script type="module" src="coordinator.js"></script>
+<script src="public/config.js"></script>
+<script src="dist/coordinator.js" type="module"></script>
 </body>
 </html>

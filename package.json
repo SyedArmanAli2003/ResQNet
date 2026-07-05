@@ -4,8 +4,18 @@
   "private": true,
   "description": "ResQNet — Crisis Response Platform",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "install:server": "npm install --prefix server"
+    "build:frontend": "node build.mjs",
+    "start": "npm run build:frontend && node server/index.js",
+    "dev": "node server/index.js",
+    "dev:build": "node build.mjs && node server/index.js",
+    "install:server": "npm install --prefix server",
+    "setup": "npm install && npm run install:server",
+    "deploy": "npm run build:frontend && echo 'Ready to deploy. Add platform-specific deploy command here.'"
+  },
+  "dependencies": {
+    "@insforge/sdk": "^1.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

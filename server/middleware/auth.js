@@ -1,4 +1,4 @@
-const admin = require('firebase-admin');
+const { getDb } = require('./insforge');
 
 async function verifyToken(req, res, next) {
   const header = req.headers.authorization;
@@ -8,8 +8,11 @@ async function verifyToken(req, res, next) {
 
   const token = header.split('Bearer ')[1];
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
-    req.user = decoded;
+    const { data: { user }, error } = await getDb().auth.getUser(token);
+    if (error || !user) {
+      throw error || new Error('No user found');
+    }
+    req.user = user;
     next();
   } catch (err) {
     console.error('[Auth] Token verification failed:', err.message);

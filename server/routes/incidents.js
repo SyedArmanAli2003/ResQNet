@@ -1,15 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { getDb, admin } = require('../middleware/firebase');
+const { getDb } = require('../middleware/insforge');
 const { verifyToken } = require('../middleware/auth');
-
-const incRef = () => getDb().collection('incidents');
 
 router.get('/', async (_req, res) => {
   try {
-    const snapshot = await incRef().orderBy('timestamp', 'desc').get();
-    const incidents = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    res.json(incidents);
+    const { data, error } = await getDb().from('incidents').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     console.error('[Incidents] GET / error:', err);
     res.status(500).json({ error: 'Failed to fetch incidents' });
@@ -18,9 +16,10 @@ router.get('/', async (_req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const doc = await incRef().doc(req.params.id).get();
-    if (!doc.exists) return res.status(404).json({ error: 'Incident not found' });
-    res.json({ id: doc.id, ...doc.data() });
+    const { data, error } = await getDb().from('incidents').select('*').eq('id', req.params.id).single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Incident not found' });
+    res.json(data);
   } catch (err) {
     console.error('[Incidents] GET /:id error:', err);
     res.status(500).json({ error: 'Failed to fetch incident' });
@@ -32,29 +31,28 @@ router.post('/', verifyToken, async (req, res) => {
     const { type, description, location, coordinates, voiceTranscript, reporterName, reporterPhone } = req.body;
     if (!type) return res.status(400).json({ error: 'Incident type is required' });
 
-    const docRef = await incRef().add({
+    const { data: incident, error } = await getDb().from('incidents').insert([{
       type,
       description: description || '',
       location: location || 'Unknown location',
       coordinates: coordinates || null,
-      voiceTranscript: voiceTranscript || '',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      voice_transcript: voiceTranscript || '',
       status: 'pending',
-      triageLevel: null,
-      triageComplete: false,
-      reportedBy: req.user.uid,
-      reporterName: reporterName || req.user.name || 'Anonymous',
-      reporterPhone: reporterPhone || ''
-    });
+      triage_complete: false,
+      reporter_id: req.user?.uid || req.user?.id || null, // Allow anon
+      reporter_name: reporterName || req.user?.name || 'Anonymous',
+    }]).select('id').single();
 
-    await getDb().collection('incidents').doc(docRef.id).collection('timeline').add({
+    if (error) throw error;
+
+    await getDb().from('incident_timeline').insert([{
+      incident_id: incident.id,
       action: 'created',
-      actor: reporterName || req.user.email || 'reporter',
+      actor: reporterName || req.user?.email || 'reporter',
       details: `${type} incident reported${location !== 'Unknown location' ? ' at ' + location.substring(0, 50) : ''}`,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }]);
 
-    res.status(201).json({ id: docRef.id, message: 'Incident created' });
+    res.status(201).json({ id: incident.id, message: 'Incident created' });
   } catch (err) {
     console.error('[Incidents] POST / error:', err);
     res.status(500).json({ error: 'Failed to create incident' });
@@ -65,22 +63,29 @@ router.patch('/:id', verifyToken, async (req, res) => {
   try {
     const updates = { ...req.body };
     delete updates.id;
+    delete updates.timestamp;
 
-    if (updates.status === 'resolved') {
-      updates.resolvedAt = admin.firestore.FieldValue.serverTimestamp();
-      updates.resolvedBy = req.user.email || 'coordinator';
+    const mappedUpdates = {};
+    for (const key of Object.keys(updates)) {
+       const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+       mappedUpdates[snakeKey] = updates[key];
+    }
 
-      const incident = await incRef().doc(req.params.id).get();
-      const data = incident.data();
-      if (data?.assignedVolunteerId) {
-        await getDb().collection('volunteers').doc(data.assignedVolunteerId).update({
+    if (mappedUpdates.status === 'resolved') {
+      mappedUpdates.resolved_at = new Date().toISOString();
+
+      const { data: incident } = await getDb().from('incidents').select('assigned_volunteer_id').eq('id', req.params.id).single();
+      
+      if (incident?.assigned_volunteer_id) {
+        await getDb().from('volunteers').update({
           available: true,
-          activeIncidentId: null
-        });
+          active_incident_id: null
+        }).eq('id', incident.assigned_volunteer_id);
       }
     }
 
-    await incRef().doc(req.params.id).update(updates);
+    const { error } = await getDb().from('incidents').update(mappedUpdates).eq('id', req.params.id);
+    if (error) throw error;
 
     res.json({ message: 'Incident updated' });
   } catch (err) {
@@ -91,10 +96,9 @@ router.patch('/:id', verifyToken, async (req, res) => {
 
 router.get('/:id/timeline', async (req, res) => {
   try {
-    const snapshot = await getDb().collection('incidents').doc(req.params.id).collection('timeline')
-      .orderBy('timestamp', 'asc').get();
-    const entries = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    res.json(entries);
+    const { data, error } = await getDb().from('incident_timeline').select('*').eq('incident_id', req.params.id).order('created_at', { ascending: true });
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     console.error('[Incidents] GET /:id/timeline error:', err);
     res.status(500).json({ error: 'Failed to fetch timeline' });

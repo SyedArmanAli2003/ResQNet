@@ -17,3 +17,6 @@ node_modules/
 .roo
 .trae
 .windsurf
+
+# Local environment secrets
+.env*.local
